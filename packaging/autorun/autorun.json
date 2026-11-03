@@ -1,0 +1,14 @@
+{
+  "value0": {
+    "scripts": [
+      {
+        "path": "autorun.sh",
+        "askQuestion": true,
+        "message": "__MESSAGE__",
+        "yesButtonText": "Start",
+        "noButtonText": "MPC"
+      }
+    ],
+    "files": []
+  }
+}
