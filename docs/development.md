@@ -28,6 +28,7 @@ Tests, previews of the screens and a chart check run on the Mac:
 swift test
 swift run beattrain --songs path/to/Songs --preview /tmp/preview   # PPM per screen
 swift run beattrain --songs path/to/Songs --list                   # charts per song
+swift run beattrain --songs path/to/Songs --demo /tmp/demo        # frames for the README's GIFs
 ```
 
 The MPC build needs Docker running. It builds a static aarch64 Linux binary in

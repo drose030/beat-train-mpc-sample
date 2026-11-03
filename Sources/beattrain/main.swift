@@ -4,6 +4,7 @@
 //
 //   beattrain [--songs DIR]...           run on the device
 //   beattrain --songs DIR --preview DIR  render sample frames as PPM files and exit
+//   beattrain --songs DIR --demo DIR     render frames for the README's animations
 //   beattrain [--songs DIR]... --list    print each song's charts and note counts
 
 import BeatTrainCore
@@ -33,12 +34,12 @@ func option(_ name: String, in arguments: [String]) -> String? {
     return arguments[index + 1]
 }
 
-func writePPM(_ canvas: Canvas, to path: String) {
+func writePPM(_ canvas: Canvas, to path: String, quiet: Bool = false) {
     let data = canvas.ppmData()
     guard let file = fopen(path, "wb") else { return log("cannot write \(path)") }
     fwrite(data, 1, data.count, file)
     fclose(file)
-    log("wrote \(path)")
+    if !quiet { log("wrote \(path)") }
 }
 
 /// Renders each screen once, with a simulated part-played chart, for checks off-device.
@@ -110,6 +111,15 @@ if arguments.contains("--list") {
 
 if let directory = option("--preview", in: arguments) {
     renderPreviews(app: BeatTrainApp(songs: songs, songRoots: roots, audio: nil), into: directory)
+    exit(0)
+}
+
+if let directory = option("--demo", in: arguments) {
+    for sub in ["play", "pads"] {
+        try? FileManager.default.createDirectory(atPath: "\(directory)/\(sub)", withIntermediateDirectories: true)
+    }
+    Demo.renderPlay(songs: songs, roots: roots, into: directory)
+    Demo.renderPads(songs: songs, roots: roots, into: directory)
     exit(0)
 }
 

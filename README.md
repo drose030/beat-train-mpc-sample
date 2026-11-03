@@ -4,9 +4,12 @@ A drum game for the Akai MPC Sample. Pick a song, and its drum part comes down a
 note highway on the screen; play it on the pads. You get hits, misses, streaks
 and accuracy, and a miss turns the drums in the song down.
 
+<p align="center">
+  <img src="docs/images/gameplay.gif" alt="Playing a song: notes come down the highway and are struck on the pads" width="640">
+</p>
 <p>
   <img src="docs/images/library.png" alt="Song list" width="49%">
-  <img src="docs/images/playing.png" alt="Playing a song" width="49%">
+  <img src="docs/images/pad-setup.gif" alt="Pad setup: hit a pad, turn the encoder to choose its drum" width="49%">
 </p>
 
 Beat-Train runs from the SD card. Nothing on the MPC is changed: take the card
