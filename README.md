@@ -103,6 +103,17 @@ saves it as a song folder for the card.
 Replace the `autorun` folder on the card with the new one. Your songs and
 settings in `BeatTrain` stay as they are.
 
+## Together with other programs
+
+[mpc-boot-thingy](https://github.com/garrettjwilke/mpc-boot-thingy) puts a boot
+menu on the card, so Beat-Train can sit next to other MPC programs such as
+SampQOL-OS. Boot thingy takes over the card's `autorun` folder, so install it
+first as its README describes, then add `beattrain-mpc-sample.zip` as an app.
+Your songs stay in `BeatTrain/Songs/` at the top of the card.
+
+This is not tested with Beat-Train yet. If you try it, please say how it went in
+the [discussions](https://github.com/drose030/beat-train-mpc-sample/discussions).
+
 ## More
 
 - How it is built and how it works inside: [docs/development.md](docs/development.md)
