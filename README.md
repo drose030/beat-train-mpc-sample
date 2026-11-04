@@ -62,8 +62,13 @@ hidden behind the loading screen: press B1 (Beat-Train) or B3 (MPC).
 The pads light up in their drum colour. Each note's upper half belongs to the
 upper row of pads, the lower half to the lower row.
 
+Under **Highway** in the settings the notes can also run from right to left instead,
+with one row per pad. A small map of the pads at the left of each row shows which
+one to hit.
+
 **Settings** (B2 in the song list): timing offset, hit window, metronome, miss
-sound, and a volume for each part of the song (drums, bass, vocals…).
+sound, highway direction, and a volume for each part of the song (drums, bass,
+vocals…).
 
 **Pads** (B3 in the song list): hit a pad, then turn the encoder to choose its
 drum. B1 puts all pads back to the defaults.

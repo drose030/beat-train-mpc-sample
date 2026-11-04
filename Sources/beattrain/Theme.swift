@@ -41,6 +41,19 @@ extension DrumVoice {
         case .green: "FLOOR TOM"
         }
     }
+
+    /// Three or four letters, for the rows of the horizontal highway.
+    var tag: String {
+        switch self {
+        case .off: ""
+        case .kick: "KICK"
+        case .red: "SNR"
+        case .yellow: "HAT"
+        case .blue: "TOM"
+        case .orange: "CYM"
+        case .green: "FLR"
+        }
+    }
 }
 
 /// Cuts `text` to at most `count` characters, marking the cut with "~".

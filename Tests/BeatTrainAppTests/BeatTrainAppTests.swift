@@ -124,6 +124,30 @@ struct SettingsScreenTests {
         #expect(!editing)
     }
 
+    @Test func highwayLineSwitchesBetweenTheTwoLayouts() {
+        let app = BeatTrainApp(songs: [], songRoots: [], audio: nil)
+        app.handle(.button(.screen2, pressed: true), now: 0)
+        app.handle(.encoder(delta: SettingsItem.all.firstIndex(of: .highway)!), now: 0)
+        app.handle(.button(.dataPush, pressed: true), now: 0)
+        app.handle(.encoder(delta: 1), now: 0)
+        #expect(app.settings.highwayLayout == .horizontal)
+        #expect(SettingsItem.highway.text(in: app.settings) == "HORIZONTAL")
+        app.handle(.encoder(delta: 1), now: 0)
+        #expect(app.settings.highwayLayout == .horizontal, "stays at the end")
+        app.handle(.encoder(delta: -1), now: 0)
+        #expect(app.settings.highwayLayout == .vertical)
+    }
+
+    @Test func theListScrollsToShowTheLastLine() {
+        let app = BeatTrainApp(songs: [], songRoots: [], audio: nil)
+        app.handle(.button(.screen2, pressed: true), now: 0)
+        app.handle(.encoder(delta: 100), now: 0)
+        var canvas = Canvas(width: 320, height: 240)
+        app.render(into: &canvas, now: 0)
+        // The selected line is the last that fits above the footer (13 lines from y 17).
+        #expect(canvas.pixel(x: 1, y: 17 + 12 * 15 + 1) == Theme.selection)
+    }
+
     @Test func stopLeavesEditingFirstThenSavesAndReturns() {
         let storage = MemorySettings()
         let app = storage.app()
@@ -345,6 +369,23 @@ struct SongEndTests {
             Issue.record("results after the music ended")
             return
         }
+    }
+
+    @Test func horizontalHighwayJudgesOnTheStruckPadsRow() throws {
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (app, _) = try makeApp()
+        app.keeper.set(.highway, to: 1, now: 0)
+        let start = startSong(app)
+        let kick = DrumKit.pad(forLayout: DrumTarget(lane: 0, row: .bottom))
+        #expect(play(app)?.rowPads == [kick], "only the pads the chart uses")
+        app.handle(.padDown(pad: PanelPads.panelPad(forPad: kick), velocity: 100), now: start)
+        #expect(play(app)?.padJudge[kick]?.isHit == true)
+        var canvas = Canvas(width: 320, height: 240)
+        app.render(into: &canvas, now: start)
+        // One row, centred: its target box lights up green left of the strike line.
+        let top = BeatTrainApp.rowsTop + (BeatTrainApp.rowsBottom - BeatTrainApp.rowsTop - BeatTrainApp.maxRowHeight) / 2
+        #expect(canvas.pixel(x: BeatTrainApp.strikeX - 6, y: top + 10) == Theme.hit)
+        #expect(canvas.pixel(x: BeatTrainApp.strikeX, y: top + 1) == Theme.accent)
     }
 
     @Test func b1RestartsTheSongFromTheStart() throws {

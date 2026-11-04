@@ -8,9 +8,10 @@ enum SettingsItem: Equatable {
     case earlyWindow
     case metronome
     case missSound
+    case highway
     case stem(String)
 
-    static let all: [SettingsItem] = [.timingOffset, .hitWindow, .earlyWindow, .metronome, .missSound]
+    static let all: [SettingsItem] = [.timingOffset, .hitWindow, .earlyWindow, .metronome, .missSound, .highway]
         + SongPlayback.stemNames.map { .stem($0) }
 
     var title: String {
@@ -20,6 +21,7 @@ enum SettingsItem: Equatable {
         case .earlyWindow: "  EARLY PART"
         case .metronome: "METRONOME"
         case .missSound: "MISS SOUND"
+        case .highway: "HIGHWAY"
         case let .stem(name): "STEM \(name.uppercased())"
         }
     }
@@ -29,6 +31,7 @@ enum SettingsItem: Equatable {
         switch self {
         case .timingOffset, .hitWindow, .earlyWindow: 5
         case .metronome, .missSound, .stem: 0.05
+        case .highway: 1
         }
     }
 
@@ -37,7 +40,7 @@ enum SettingsItem: Equatable {
         switch self {
         case .timingOffset: 2 * TimingConfiguration.offsetRangeMs
         case .hitWindow, .earlyWindow: 200
-        case .metronome, .missSound, .stem: 1
+        case .metronome, .missSound, .stem, .highway: 1
         }
     }
 
@@ -49,7 +52,7 @@ enum SettingsItem: Equatable {
             TimingConfiguration.minTotalSec * 1000...TimingConfiguration.maxTotalSec * 1000
         case .earlyWindow:
             0...TimingConfiguration.maxFront(forTotal: settings.hitWindowMs / 1000) * 1000
-        case .metronome, .missSound, .stem:
+        case .metronome, .missSound, .stem, .highway:
             0...1
         }
     }
@@ -61,6 +64,7 @@ enum SettingsItem: Equatable {
         case .earlyWindow: settings.earlyWindowMs
         case .metronome: settings.metronomeVolume
         case .missSound: settings.missSoundVolume
+        case .highway: settings.highwayLayout == .horizontal ? 1 : 0
         case let .stem(name): settings.stemVolume(name)
         }
     }
@@ -74,6 +78,7 @@ enum SettingsItem: Equatable {
         case .earlyWindow: settings.earlyWindowMs = rounded
         case .metronome: settings.metronomeVolume = rounded
         case .missSound: settings.missSoundVolume = rounded
+        case .highway: settings.highwayLayout = rounded >= 1 ? .horizontal : .vertical
         case let .stem(name): settings.stemVolumes[name] = rounded
         }
     }
@@ -87,6 +92,7 @@ enum SettingsItem: Equatable {
         switch self {
         case .timingOffset: return "\(BeatTrainApp.signed(value)) MS"
         case .hitWindow, .earlyWindow: return "\(Int(value.rounded())) MS"
+        case .highway: return settings.highwayLayout == .horizontal ? "HORIZONTAL" : "VERTICAL"
         case .metronome, .missSound, .stem:
             return value == 0 ? "OFF" : "\(Int((value * 100).rounded()))%"
         }

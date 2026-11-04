@@ -11,6 +11,14 @@ import Musl
 import Darwin
 #endif
 
+/// Which way the note highway runs on the play screen.
+public enum HighwayLayout: String, Codable, Sendable {
+    /// Notes come down four columns, one per pair of pads.
+    case vertical
+    /// Notes run right to left, one row per pad (as in Melodics).
+    case horizontal
+}
+
 /// The player's settings that outlive a session, kept as JSON (on the MPC in
 /// `BeatTrain/settings.json` on the card). Missing or unreadable files and missing
 /// keys fall back to the defaults, so older and newer files both load. Values are
@@ -45,6 +53,7 @@ public struct PlayerSettings: Codable, Equatable, Sendable {
     }
     /// Which voice each of the eight pads plays (see `DrumKit.padVoices`).
     public var padVoices: [Int: DrumVoice]
+    public var highwayLayout: HighwayLayout
 
     public static let defaultHitWindowMs = 120.0
     public static let defaultEarlyWindowMs = 50.0
@@ -57,7 +66,8 @@ public struct PlayerSettings: Codable, Equatable, Sendable {
         metronomeVolume: Double = 0,
         missSoundVolume: Double = PlayerSettings.defaultMissSoundVolume,
         stemVolumes: [String: Double] = [:],
-        padVoices: [Int: DrumVoice] = DrumKit.defaultPadVoices
+        padVoices: [Int: DrumVoice] = DrumKit.defaultPadVoices,
+        highwayLayout: HighwayLayout = .vertical
     ) {
         // Through the same clamps as later changes (didSet does not run in init).
         let timing = TimingConfiguration(totalSec: hitWindowMs / 1000, frontSec: earlyWindowMs / 1000, offsetMs: timingOffsetMs)
@@ -68,6 +78,7 @@ public struct PlayerSettings: Codable, Equatable, Sendable {
         self.missSoundVolume = Self.clampVolume(missSoundVolume)
         self.stemVolumes = stemVolumes.mapValues(Self.clampVolume)
         self.padVoices = padVoices
+        self.highwayLayout = highwayLayout
     }
 
     public var kit: DrumKit {
@@ -87,7 +98,7 @@ public struct PlayerSettings: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case timingOffsetMs, hitWindowMs, earlyWindowMs, metronomeVolume, missSoundVolume, stemVolumes, padVoices
+        case timingOffsetMs, hitWindowMs, earlyWindowMs, metronomeVolume, missSoundVolume, stemVolumes, padVoices, highwayLayout
     }
 
     public init(from decoder: Decoder) throws {
@@ -110,7 +121,8 @@ public struct PlayerSettings: Codable, Equatable, Sendable {
             metronomeVolume: value(Double.self, .metronomeVolume) ?? 0,
             missSoundVolume: value(Double.self, .missSoundVolume) ?? Self.defaultMissSoundVolume,
             stemVolumes: value([String: Double].self, .stemVolumes) ?? [:],
-            padVoices: voices
+            padVoices: voices,
+            highwayLayout: value(HighwayLayout.self, .highwayLayout) ?? .vertical
         )
     }
 
@@ -126,6 +138,7 @@ public struct PlayerSettings: Codable, Equatable, Sendable {
             Dictionary(uniqueKeysWithValues: padVoices.map { (String($0.key), $0.value.rawValue) }),
             forKey: .padVoices
         )
+        try container.encode(highwayLayout, forKey: .highwayLayout)
     }
 
     /// The settings in `url`, or the defaults.

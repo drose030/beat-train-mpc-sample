@@ -88,6 +88,14 @@ struct PlayerSettingsTests {
         #expect(settings.earlyWindowMs <= 50, "the early part shrinks with the window")
     }
 
+    @Test func highwayLayoutIsKeptAndDefaultsToVertical() throws {
+        #expect(try JSONDecoder().decode(PlayerSettings.self, from: Data("{}".utf8)).highwayLayout == .vertical)
+        let url = tempURL()
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        try PlayerSettings(highwayLayout: .horizontal).save(to: url)
+        #expect(PlayerSettings.load(from: url).highwayLayout == .horizontal)
+    }
+
     @Test func defaultsMatchTheOriginalGame() {
         let settings = PlayerSettings()
         #expect(settings.hitWindowMs == 120)

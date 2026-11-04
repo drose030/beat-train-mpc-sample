@@ -8,6 +8,13 @@ extension BeatTrainApp {
     static let strikeY = 202
     static let highwayBottom = 216
     static let pixelsPerSecond = 125.0
+    // The horizontal highway: rows between `rowsTop` and `rowsBottom`, the panel
+    // in miniature left of each row, notes running left onto `strikeX`.
+    static let padMapWidth = 32
+    static let strikeX = 74
+    static let rowsTop = 32
+    static let rowsBottom = 218
+    static let maxRowHeight = 32
 
     func render(into canvas: inout Canvas, now: Double) {
         canvas.clear(Theme.background)
@@ -147,6 +154,37 @@ extension BeatTrainApp {
 
     private func drawPlay(_ play: Play, now: Double, into canvas: inout Canvas) {
         let time = playback.chartTime(now: now)
+        let centerX: Int
+        switch settings.highwayLayout {
+        case .vertical:
+            drawVerticalHighway(play, time: time, now: now, into: &canvas)
+            drawSidebar(play, time: time, into: &canvas)
+            centerX = Self.highwayWidth / 2
+        case .horizontal:
+            drawHorizontalHighway(play, time: time, now: now, into: &canvas)
+            drawInfoLine(play, time: time, into: &canvas)
+            centerX = (Self.padMapWidth + canvas.width) / 2
+        }
+
+        // Count-in and pause, over the middle of the highway.
+        if time < 0 {
+            let count = "\(Int((-time).rounded(.up)))"
+            canvas.drawText(count, x: centerX - Canvas.textWidth(count, scale: 5) / 2, y: 70, scale: 5, Theme.text)
+        }
+        if playback.isPaused {
+            canvas.fillRect(x: centerX - 60, y: 80, width: 120, height: 28, Theme.panel)
+            canvas.drawText("PAUSED", x: centerX - Canvas.textWidth("PAUSED", scale: 2) / 2, y: 87, scale: 2, Theme.text)
+        } else if play.session.isFinished(at: time) {
+            // The notes are done, the music plays on.
+            canvas.fillRect(x: centerX - 80, y: 76, width: 160, height: 40, Theme.panel)
+            canvas.drawText("SONG END", x: centerX - Canvas.textWidth("SONG END", scale: 2) / 2, y: 82, scale: 2, Theme.text)
+            canvas.drawText("STOP: RESULTS", x: centerX - Canvas.textWidth("STOP: RESULTS") / 2, y: 102, Theme.dim)
+        }
+        drawSoftKeys(into: &canvas)
+    }
+
+    /// Notes come down four columns onto the strike line, the pads below it.
+    private func drawVerticalHighway(_ play: Play, time: Double, now: Double, into canvas: inout Canvas) {
         let session = play.session
         let pps = Self.pixelsPerSecond
         let futureSec = Double(Self.strikeY) / pps
@@ -212,24 +250,6 @@ extension BeatTrainApp {
             let y = target.row == PanelPads.rowOnTop ? Self.highwayBottom + 3 : Self.highwayBottom + 13
             canvas.fillRect(x: target.lane * Self.laneWidth + 6, y: y, width: Self.laneWidth - 12, height: 8, color)
         }
-
-        // Count-in and pause.
-        if time < 0 {
-            let count = "\(Int((-time).rounded(.up)))"
-            canvas.drawText(count, x: Self.highwayWidth / 2 - Canvas.textWidth(count, scale: 5) / 2, y: 70, scale: 5, Theme.text)
-        }
-        if playback.isPaused {
-            canvas.fillRect(x: 40, y: 80, width: 120, height: 28, Theme.panel)
-            canvas.drawText("PAUSED", x: 100 - Canvas.textWidth("PAUSED", scale: 2) / 2, y: 87, scale: 2, Theme.text)
-        } else if session.isFinished(at: time) {
-            // The notes are done, the music plays on.
-            canvas.fillRect(x: 20, y: 76, width: 160, height: 40, Theme.panel)
-            canvas.drawText("SONG END", x: 100 - Canvas.textWidth("SONG END", scale: 2) / 2, y: 82, scale: 2, Theme.text)
-            canvas.drawText("STOP: RESULTS", x: 100 - Canvas.textWidth("STOP: RESULTS") / 2, y: 102, Theme.dim)
-        }
-
-        drawSidebar(play, time: time, into: &canvas)
-        drawSoftKeys(into: &canvas)
     }
 
     private func drawSidebar(_ play: Play, time: Double, into canvas: inout Canvas) {
@@ -272,14 +292,125 @@ extension BeatTrainApp {
         }
     }
 
+    /// Notes run right to left onto the strike line, one row per pad. Struck notes
+    /// stay on the row and pass the line in white; missed ones fade.
+    private func drawHorizontalHighway(_ play: Play, time: Double, now: Double, into canvas: inout Canvas) {
+        let session = play.session
+        let pps = Self.pixelsPerSecond
+        let left = Self.padMapWidth, width = canvas.width - left
+        let futureSec = Double(canvas.width - Self.strikeX) / pps
+        let pastSec = Double(Self.strikeX - left) / pps
+        let rowHeight = min(Self.maxRowHeight, (Self.rowsBottom - Self.rowsTop) / max(play.rowPads.count, 1))
+        let height = rowHeight * play.rowPads.count
+        let top = Self.rowsTop + (Self.rowsBottom - Self.rowsTop - height) / 2
+
+        canvas.fillRect(x: left, y: top, width: width, height: height, Theme.highway)
+        for beat in play.beatTimes where beat > time - pastSec && beat < time + futureSec {
+            let x = Self.strikeX + Int(((beat - time) * pps).rounded())
+            canvas.fillRect(x: x, y: top, width: 1, height: height, Theme.beatLine)
+        }
+
+        // Rows: input flash, separator, the panel in miniature, target box.
+        for (row, pad) in play.rowPads.enumerated() {
+            let y = top + row * rowHeight
+            let voice = kit.voice(forPad: pad)
+            let lit = play.padFlashUntil[pad] > now
+            if lit {
+                canvas.fillRect(x: left, y: y, width: width, height: rowHeight, Theme.highway.mixed(with: voice.color, amount: 0.22))
+            }
+            if row > 0 {
+                canvas.fillRect(x: left, y: y, width: width, height: 1, Theme.laneLine)
+            }
+            // Which of the panel's eight pads this row is, as they sit on the panel.
+            let hasTag = rowHeight >= 26
+            let mapY = hasTag ? y + 4 : y + (rowHeight - 11) / 2
+            for (panelRow, pads) in PanelPads.rows.enumerated() {
+                for (column, cell) in pads.enumerated() {
+                    let color = cell != pad ? Theme.panel : (lit ? Theme.text : voice.color)
+                    canvas.fillRect(x: 3 + column * 6, y: mapY + panelRow * 6, width: 5, height: 5, color)
+                }
+            }
+            if hasTag {
+                canvas.drawText(voice.tag, x: 2, y: y + 18, Theme.dim)
+            }
+            let box = (x: Self.strikeX - 7, y: y + 3, width: 14, height: rowHeight - 5)
+            if let judge = play.padJudge[pad], judge.until > now {
+                canvas.fillRect(x: box.x, y: box.y, width: box.width, height: box.height, judge.isHit ? Theme.hit : Theme.miss)
+            }
+            canvas.strokeRect(x: box.x, y: box.y, width: box.width, height: box.height, Theme.dim)
+        }
+
+        // Notes, from the first one that can still be on screen.
+        let notes = session.chart.notes
+        var low = 0, high = notes.count
+        while low < high {
+            let mid = (low + high) / 2
+            if notes[mid].timeSec < time - pastSec { low = mid + 1 } else { high = mid }
+        }
+        var index = low
+        while index < notes.count, notes[index].timeSec < time + futureSec {
+            defer { index += 1 }
+            guard let row = play.rowPads.firstIndex(of: DrumKit.pad(forLayout: session.target(ofNote: index))) else { continue }
+            var color = session.voice(ofNote: index).color
+            switch session.state(ofNote: index) {
+            case .hit: color = Theme.text
+            case .missed: color = color.mixed(with: Theme.highway, amount: 0.7)
+            default: break
+            }
+            let x = Self.strikeX + Int(((notes[index].timeSec - time) * pps).rounded())
+            // Clipped at the panel map, which the notes pass under.
+            let noteLeft = max(x - 5, left)
+            guard x + 5 > noteLeft else { continue }
+            canvas.fillRect(x: noteLeft, y: top + row * rowHeight + 5, width: x + 5 - noteLeft, height: rowHeight - 9, color)
+        }
+        canvas.fillRect(x: Self.strikeX - 1, y: top, width: 2, height: height, Theme.accent)
+    }
+
+    /// Above the horizontal highway: the song, streak and accuracy, and the
+    /// song's progress; below it, the controls.
+    private func drawInfoLine(_ play: Play, time: Double, into canvas: inout Canvas) {
+        let score = play.session.score
+        let right = "STREAK \(score.streak)  \(Int((play.session.runningAccuracy * 100).rounded()))%"
+        let titleChars = (canvas.width - Canvas.textWidth(right) - 16) / 6
+        canvas.drawText(fit(play.song.title, titleChars), x: 4, y: 18, Theme.accent)
+        canvas.drawText(right, x: canvas.width - Canvas.textWidth(right) - 4, y: 18, Theme.text)
+
+        let last = play.session.chart.notes.last?.timeSec ?? 1
+        let progress = min(max(time / max(last, 0.001), 0), 1)
+        canvas.fillRect(x: 0, y: 28, width: canvas.width, height: 2, Theme.panel)
+        canvas.fillRect(x: 0, y: 28, width: Int(Double(canvas.width) * progress), height: 2, Theme.accent)
+
+        let y = canvas.height - 12
+        canvas.drawText(hints.footer.joined(separator: "  "), x: 4, y: y, Theme.dim)
+        if !playback.hasMusic {
+            canvas.drawText("NO AUDIO", x: canvas.width - Canvas.textWidth("NO AUDIO") - 4, y: y, Theme.miss)
+        } else if timingOffsetMs != 0 {
+            let offset = "OFFSET \(Self.signed(timingOffsetMs))MS"
+            canvas.drawText(offset, x: canvas.width - Canvas.textWidth(offset) - 4, y: y, Theme.dim)
+        }
+    }
+
+    /// The pads the horizontal highway shows, top row first: those the chart's notes
+    /// fall on, cymbals at the top and the kick at the bottom, as in drum notation.
+    /// Every pad with a voice when the chart has no notes.
+    static func horizontalRows(for session: GameSession, kit: DrumKit) -> [Int] {
+        let order: [DrumVoice] = [.orange, .blue, .yellow, .red, .green, .kick]
+        let used = Set(session.chart.notes.indices.map { DrumKit.pad(forLayout: session.target(ofNote: $0)) })
+        let pads = (0..<DrumKit.padCount).filter { kit.voice(forPad: $0) != .off && (used.isEmpty || used.contains($0)) }
+        return pads.sorted { (order.firstIndex(of: kit.voice(forPad: $0)) ?? order.count, $0) < (order.firstIndex(of: kit.voice(forPad: $1)) ?? order.count, $1) }
+    }
+
     // MARK: - Settings
 
     private func drawSettings(index: Int, editing: Bool, into canvas: inout Canvas) {
         drawSoftKeys(into: &canvas)
         drawFooter(into: &canvas)
         let rowHeight = 15
-        for (row, item) in SettingsItem.all.enumerated() {
-            let y = 17 + row * rowHeight
+        // As many lines as fit above the footer; the list scrolls with the selection.
+        let visible = (canvas.height - 27 - 17) / rowHeight
+        let first = max(0, index - visible + 1)
+        for (row, item) in SettingsItem.all.enumerated().dropFirst(first).prefix(visible) {
+            let y = 17 + (row - first) * rowHeight
             let selected = row == index
             if selected {
                 canvas.fillRect(x: 0, y: y, width: canvas.width, height: rowHeight - 1, Theme.selection)

@@ -20,9 +20,13 @@ struct Play {
     let difficulty: DrumDifficulty
     var session: GameSession
     let beatTimes: [Double]
+    /// The pads the horizontal highway shows, top row first.
+    let rowPads: [Int]
     var laneFlash: [(until: Double, color: Color)?] = Array(repeating: nil, count: 4)
     var judgeFlash: [(until: Double, isHit: Bool)?] = Array(repeating: nil, count: 4)
     var padFlashUntil = [Double](repeating: 0, count: DrumKit.padCount)
+    /// A strike's judgement on its pad, for the horizontal highway.
+    var padJudge: [(until: Double, isHit: Bool)?] = Array(repeating: nil, count: DrumKit.padCount)
 }
 
 enum Screen {
@@ -329,7 +333,9 @@ final class BeatTrainApp {
 
     /// A fresh run of a chart; the caller (re)starts `playback`.
     private func newPlay(song: SongMetadata, difficulty: DrumDifficulty, chart: DrumChart) -> Play {
-        Play(song: song, difficulty: difficulty, session: GameSession(chart: chart, kit: kit, timing: timing), beatTimes: chart.beatTimesSec())
+        let session = GameSession(chart: chart, kit: kit, timing: timing)
+        return Play(song: song, difficulty: difficulty, session: session, beatTimes: chart.beatTimesSec(),
+                    rowPads: Self.horizontalRows(for: session, kit: kit))
     }
 
     /// Shows the results. The stems stay loaded for a retry until the results close.
@@ -350,7 +356,11 @@ final class BeatTrainApp {
             if let lane = kit.lane(forPad: pad) {
                 play.laneFlash[lane] = (now + 0.1, kit.voice(forPad: pad).color)
             }
-            apply(play.session.strike(pad: pad, at: time), to: &play, now: now)
+            let feedback = play.session.strike(pad: pad, at: time)
+            for case let .flashLane(_, isHit) in feedback {
+                play.padJudge[pad] = (now + 0.15, isHit)
+            }
+            apply(feedback, to: &play, now: now)
         case .padSetup:
             screen = .padSetup(selected: pad, flashUntil: now + 0.15)
         default:

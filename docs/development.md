@@ -59,8 +59,8 @@ a song the bottom line names them, and K2 and K3 sound the level they set;
 over a running song they stay silent.
 
 **Settings** (B2 in the song list): timing offset, hit window and its early part
-(the original game's settings), metronome and miss sound volume, and a volume per
-stem. Turn the encoder to pick a line, push to edit it, turn to change it, push
+(the original game's settings), metronome and miss sound volume, the highway
+layout, and a volume per stem. The list scrolls when it is longer than the screen. Turn the encoder to pick a line, push to edit it, turn to change it, push
 or STOP when done; ERASE or B1 puts the line back to its default; STOP or B3 returns
 and saves. The metronome clicks on the song's beats (the chart's beat grid), placed
 to the sample by the audio thread.
@@ -78,7 +78,14 @@ then the results come; STOP shows them at once.
 
 The pads light in their drum colour and flash when struck. The two rows are
 swapped against the original game (snare row at the bottom); the highway draws each
-note's upper half for the upper pad row. Hit window and pad assignment are the
+note's upper half for the upper pad row.
+
+The horizontal highway (settings: HIGHWAY) runs the notes right to left with one row
+per pad, cymbals at the top and the kick at the bottom; only the pads the chart's
+notes fall on get a row. A 4×2 map of the panel at the left of each row shows its pad.
+Struck notes turn white and stay on the row, missed ones fade, and the target box
+of the struck pad flashes green or red. Song, streak and accuracy sit in a line
+above it; hits, misses and best streak are on the results only. Hit window and pad assignment are the
 original defaults (120 ms, 50 ms early). All settings are saved in
 `BeatTrain/settings.json` on the card: when leaving the settings or pad setup,
 2 s after the last change, and on every way out. The game clock is the
