@@ -21,14 +21,14 @@ uint32_t cmpc_display_height(const cmpc_display *display);
 /// ~100 ms. Returns 0 or a negative errno.
 int cmpc_display_present(cmpc_display *display, const uint32_t *pixels);
 
-/// Like `cmpc_display_present`, but sends only what changed, in vertical strips
-/// `strip` pixels wide, left to right, each as its own update of the shown buffer.
-/// On an SPI panel a frame takes longer to send than the panel takes to refresh, so
-/// it shows part old, part new frame: sent row by row, the line between them is
-/// horizontal and cuts sideways-moving things in two; sent in strips it is
-/// (nearly) vertical. Falls back to `cmpc_display_present` on drivers without
-/// damage clips. Returns 0 or a negative errno.
-int cmpc_display_present_columns(cmpc_display *display, const uint32_t *pixels, uint32_t strip);
+/// Like `cmpc_display_present`, but sends only what changed, in strips `strip`
+/// pixels wide (`columns`, left to right) or tall (rows, top to bottom), each as
+/// its own update of the shown buffer. On an SPI panel a frame takes longer to send
+/// than the panel takes to refresh, so it shows part old, part new frame; the line
+/// between them runs across the strips' order. Rows suit things that move up and
+/// down, columns things that move sideways. Falls back to `cmpc_display_present`
+/// on drivers without damage clips. Returns 0 or a negative errno.
+int cmpc_display_present_strips(cmpc_display *display, const uint32_t *pixels, uint32_t strip, int columns);
 
 void cmpc_display_close(cmpc_display *display);
 

@@ -347,35 +347,59 @@ int cmpc_display_present(cmpc_display *d, const uint32_t *pixels) {
     return 0;
 }
 
-int cmpc_display_present_columns(cmpc_display *d, const uint32_t *pixels, uint32_t strip) {
+// Copies one changed rectangle into the shown buffer and sends it as its own
+// update. 1 when the driver has no damage clips (nothing sent), else 0 or -errno.
+static int send_rect(cmpc_display *d, struct buffer *front, const uint32_t *pixels,
+                     uint32_t x0, uint32_t y0, uint32_t x1, uint32_t y1) {
+    size_t span = (size_t)(x1 - x0) * 4;
+    for (uint32_t y = y0; y < y1; y++) {
+        size_t at = (size_t)y * d->width + x0;
+        memcpy(front->map + (size_t)y * front->pitch + (size_t)x0 * 4, pixels + at, span);
+        memcpy(d->shown + at, pixels + at, span);
+    }
+    // One rectangle per call: the driver merges the clips of one call into a
+    // single rectangle.
+    struct drm_clip_rect clip = { (uint16_t)x0, (uint16_t)y0, (uint16_t)x1, (uint16_t)y1 };
+    struct drm_mode_fb_dirty_cmd dirty = {
+        .fb_id = front->fb_id, .num_clips = 1, .clips_ptr = (uint64_t)(uintptr_t)&clip,
+    };
+    if (xioctl(d->fd, DRM_IOCTL_MODE_DIRTYFB, &dirty) == 0) return 0;
+    if (errno != ENOSYS && errno != EINVAL && errno != EOPNOTSUPP) return -errno;
+    return 1;
+}
+
+int cmpc_display_present_strips(cmpc_display *d, const uint32_t *pixels, uint32_t strip, int columns) {
     if (!d->use_dirty_clips || strip == 0) return cmpc_display_present(d, pixels);
     struct buffer *front = &d->buffers[d->front];
-    for (uint32_t x0 = 0; x0 < d->width; x0 += strip) {
-        uint32_t x1 = x0 + strip < d->width ? x0 + strip : d->width;
-        size_t span = (size_t)(x1 - x0) * 4;
-        // The rows of this strip that changed.
-        uint32_t y0 = d->height, y1 = 0;
-        for (uint32_t y = 0; y < d->height; y++) {
-            size_t at = (size_t)y * d->width + x0;
-            if (memcmp(d->shown + at, pixels + at, span) != 0) {
-                if (y0 == d->height) y0 = y;
-                y1 = y + 1;
+    uint32_t length = columns ? d->width : d->height;
+    for (uint32_t s0 = 0; s0 < length; s0 += strip) {
+        uint32_t s1 = s0 + strip < length ? s0 + strip : length;
+        // The changed part of this strip, across it.
+        uint32_t lo = UINT32_MAX, hi = 0;
+        if (columns) {
+            size_t span = (size_t)(s1 - s0) * 4;
+            for (uint32_t y = 0; y < d->height; y++) {
+                size_t at = (size_t)y * d->width + s0;
+                if (memcmp(d->shown + at, pixels + at, span) == 0) continue;
+                if (lo == UINT32_MAX) lo = y;
+                hi = y + 1;
+            }
+        } else {
+            for (uint32_t y = s0; y < s1; y++) {
+                const uint32_t *old = d->shown + (size_t)y * d->width, *now = pixels + (size_t)y * d->width;
+                uint32_t a = 0, b = d->width;
+                while (a < b && old[a] == now[a]) a++;
+                while (b > a && old[b - 1] == now[b - 1]) b--;
+                if (a == b) continue;
+                if (a < lo) lo = a;
+                if (b > hi) hi = b;
             }
         }
-        if (y0 == d->height) continue;
-        for (uint32_t y = y0; y < y1; y++) {
-            size_t at = (size_t)y * d->width + x0;
-            memcpy(front->map + (size_t)y * front->pitch + (size_t)x0 * 4, pixels + at, span);
-            memcpy(d->shown + at, pixels + at, span);
-        }
-        // One update per strip: the driver merges the clips of one call into a
-        // single rectangle, which it would send row by row again.
-        struct drm_clip_rect clip = { (uint16_t)x0, (uint16_t)y0, (uint16_t)x1, (uint16_t)y1 };
-        struct drm_mode_fb_dirty_cmd dirty = {
-            .fb_id = front->fb_id, .num_clips = 1, .clips_ptr = (uint64_t)(uintptr_t)&clip,
-        };
-        if (xioctl(d->fd, DRM_IOCTL_MODE_DIRTYFB, &dirty)) {
-            if (errno != ENOSYS && errno != EINVAL && errno != EOPNOTSUPP) return -errno;
+        if (lo == UINT32_MAX) continue;
+        int rc = columns ? send_rect(d, front, pixels, s0, lo, s1, hi)
+                         : send_rect(d, front, pixels, lo, s0, hi, s1);
+        if (rc < 0) return rc;
+        if (rc == 1) {
             d->use_dirty_clips = 0;
             return cmpc_display_present(d, pixels);
         }
