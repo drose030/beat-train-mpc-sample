@@ -85,7 +85,14 @@ per pad, cymbals at the top and the kick at the bottom; only the pads the chart'
 notes fall on get a row. A 4×2 map of the panel at the left of each row shows its pad.
 Struck notes turn white and stay on the row, missed ones fade, and the target box
 of the struck pad flashes green or red. Song, streak and accuracy sit in a line
-above it; hits, misses and best streak are on the results only. Hit window and pad assignment are the
+above it; hits, misses and best streak are on the results only.
+
+The screen is an SPI panel (25 MHz): a full frame takes about 50 ms to send, longer
+than the panel takes to refresh itself, so it shows part old, part new frame. Sent
+row by row, the line between them is horizontal and cuts notes that run sideways in
+two. The horizontal highway therefore goes out in vertical strips with only what
+changed (`Display.Sweep.columns`); on the device it runs at about 58 frames per
+second. During a song the log notes the frame rate every 10 s. Hit window and pad assignment are the
 original defaults (120 ms, 50 ms early). All settings are saved in
 `BeatTrain/settings.json` on the card: when leaving the settings or pad setup,
 2 s after the last change, and on every way out. The game clock is the

@@ -375,7 +375,9 @@ struct SongEndTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let (app, _) = try makeApp()
         app.keeper.set(.highway, to: 1, now: 0)
+        #expect(app.sweep == .rows, "menus go out row by row")
         let start = startSong(app)
+        #expect(app.sweep == .columns, "notes running sideways go out in strips")
         let kick = DrumKit.pad(forLayout: DrumTarget(lane: 0, row: .bottom))
         #expect(play(app)?.rowPads == [kick], "only the pads the chart uses")
         app.handle(.padDown(pad: PanelPads.panelPad(forPad: kick), velocity: 100), now: start)

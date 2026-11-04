@@ -194,6 +194,8 @@ do {
 var lights = PanelLights()
 let frameInterval = 1.0 / 60
 var nextFrame = monotonicSeconds()
+// How long frames take to reach the panel, logged every 10 s during a song.
+var frameStats = (since: monotonicSeconds(), frames: 0, total: 0.0, longest: 0.0)
 
 log("ready after \(monotonicSeconds() - startedAt) s")
 while stopRequested == 0 && !app.lifecycle.isOver {
@@ -221,10 +223,25 @@ while stopRequested == 0 && !app.lifecycle.isOver {
 
     app.tick(now: now)
     app.render(into: &canvas, now: now)
+    let sweep = app.sweep
     do {
-        try display.present(canvas)
+        try display.present(canvas, sweep: sweep)
     } catch {
         log("present error: \(error)")
+    }
+    if case .playing = app.screen {
+        let took = monotonicSeconds() - now
+        frameStats.frames += 1
+        frameStats.total += took
+        frameStats.longest = max(frameStats.longest, took)
+        let elapsed = monotonicSeconds() - frameStats.since
+        if elapsed >= 10 {
+            let fps = Double(frameStats.frames) / elapsed
+            log("display \(sweep): \(Int(fps.rounded())) fps, frame \(Int((frameStats.total / Double(frameStats.frames) * 1000).rounded())) ms on average, \(Int((frameStats.longest * 1000).rounded())) ms at most")
+            frameStats = (monotonicSeconds(), 0, 0, 0)
+        }
+    } else {
+        frameStats = (monotonicSeconds(), 0, 0, 0)
     }
 
     if let surface {

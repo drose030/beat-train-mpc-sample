@@ -74,6 +74,10 @@ struct drm_mode_fb_dirty_cmd {
     uint64_t clips_ptr;
 };
 
+struct drm_clip_rect {
+    uint16_t x1, y1, x2, y2;
+};
+
 struct drm_event {
     uint32_t type, length;
 };
@@ -108,6 +112,8 @@ struct cmpc_display {
     struct buffer buffers[2];
     int front;           // index of the buffer on screen
     int use_page_flip;   // falls back to DIRTYFB on drivers without flips
+    int use_dirty_clips; // cleared when DIRTYFB with clips is not supported
+    uint32_t *shown;     // the frame on screen, to find what changed
 };
 
 static int xioctl(int fd, unsigned long request, void *arg) {
@@ -249,6 +255,13 @@ cmpc_display *cmpc_display_open(const char *path, char *err, size_t err_len) {
     d->height = mode.vdisplay;
     d->crtc_id = crtc_id;
     d->use_page_flip = 1;
+    d->use_dirty_clips = 1;
+    d->shown = calloc((size_t)d->width * d->height, sizeof(uint32_t));
+    if (!d->shown) {
+        set_err(err, err_len, "out of memory");
+        cmpc_display_close(d);
+        return NULL;
+    }
     for (int i = 0; i < 2; i++) {
         int rc = create_buffer(fd, d->width, d->height, &d->buffers[i]);
         if (rc) {
@@ -307,6 +320,7 @@ static int wait_for_flip(int fd) {
 }
 
 int cmpc_display_present(cmpc_display *d, const uint32_t *pixels) {
+    memcpy(d->shown, pixels, (size_t)d->width * d->height * sizeof(uint32_t));
     if (d->use_page_flip) {
         int back = 1 - d->front;
         copy_frame(d, &d->buffers[back], pixels);
@@ -333,8 +347,45 @@ int cmpc_display_present(cmpc_display *d, const uint32_t *pixels) {
     return 0;
 }
 
+int cmpc_display_present_columns(cmpc_display *d, const uint32_t *pixels, uint32_t strip) {
+    if (!d->use_dirty_clips || strip == 0) return cmpc_display_present(d, pixels);
+    struct buffer *front = &d->buffers[d->front];
+    for (uint32_t x0 = 0; x0 < d->width; x0 += strip) {
+        uint32_t x1 = x0 + strip < d->width ? x0 + strip : d->width;
+        size_t span = (size_t)(x1 - x0) * 4;
+        // The rows of this strip that changed.
+        uint32_t y0 = d->height, y1 = 0;
+        for (uint32_t y = 0; y < d->height; y++) {
+            size_t at = (size_t)y * d->width + x0;
+            if (memcmp(d->shown + at, pixels + at, span) != 0) {
+                if (y0 == d->height) y0 = y;
+                y1 = y + 1;
+            }
+        }
+        if (y0 == d->height) continue;
+        for (uint32_t y = y0; y < y1; y++) {
+            size_t at = (size_t)y * d->width + x0;
+            memcpy(front->map + (size_t)y * front->pitch + (size_t)x0 * 4, pixels + at, span);
+            memcpy(d->shown + at, pixels + at, span);
+        }
+        // One update per strip: the driver merges the clips of one call into a
+        // single rectangle, which it would send row by row again.
+        struct drm_clip_rect clip = { (uint16_t)x0, (uint16_t)y0, (uint16_t)x1, (uint16_t)y1 };
+        struct drm_mode_fb_dirty_cmd dirty = {
+            .fb_id = front->fb_id, .num_clips = 1, .clips_ptr = (uint64_t)(uintptr_t)&clip,
+        };
+        if (xioctl(d->fd, DRM_IOCTL_MODE_DIRTYFB, &dirty)) {
+            if (errno != ENOSYS && errno != EINVAL && errno != EOPNOTSUPP) return -errno;
+            d->use_dirty_clips = 0;
+            return cmpc_display_present(d, pixels);
+        }
+    }
+    return 0;
+}
+
 void cmpc_display_close(cmpc_display *d) {
     if (!d) return;
+    free(d->shown);
     for (int i = 0; i < 2; i++) destroy_buffer(d->fd, &d->buffers[i]);
     close(d->fd);
     free(d);

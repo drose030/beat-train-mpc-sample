@@ -16,6 +16,13 @@ extension BeatTrainApp {
     static let rowsBottom = 218
     static let maxRowHeight = 32
 
+    /// How the frame should go out to the panel: notes running sideways need it
+    /// sent in strips, or a frame half sent cuts them in two (see `Display.Sweep`).
+    var sweep: Display.Sweep {
+        if splash == nil, case .playing = screen, settings.highwayLayout == .horizontal { return .columns }
+        return .rows
+    }
+
     func render(into canvas: inout Canvas, now: Double) {
         canvas.clear(Theme.background)
         if let splash {

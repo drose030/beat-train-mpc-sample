@@ -33,10 +33,27 @@ public final class Display {
         Canvas(width: width, height: height)
     }
 
+    /// The order in which a frame goes out to the panel.
+    public enum Sweep: Sendable {
+        /// The whole frame, row by row (page flips): for screens that move up and down.
+        case rows
+        /// What changed, in strips left to right: for screens that move sideways.
+        case columns
+    }
+
+    /// The strip width for `.columns`: narrow enough that a note is rarely cut,
+    /// wide enough that the per-update overhead stays small.
+    public static let stripWidth: UInt32 = 16
+
     /// Shows the canvas. Blocks until the frame is on screen (vsync-paced).
-    public func present(_ canvas: Canvas) throws {
+    public func present(_ canvas: Canvas, sweep: Sweep = .rows) throws {
         precondition(canvas.width == width && canvas.height == height, "canvas size must match the display")
-        let rc = canvas.pixels.withUnsafeBufferPointer { cmpc_display_present(handle, $0.baseAddress) }
+        let rc = canvas.pixels.withUnsafeBufferPointer { pixels in
+            switch sweep {
+            case .rows: cmpc_display_present(handle, pixels.baseAddress)
+            case .columns: cmpc_display_present_columns(handle, pixels.baseAddress, Self.stripWidth)
+            }
+        }
         if rc < 0 && rc != -Int32(ETIMEDOUT) && rc != -Int32(EBUSY) {
             throw HardwareError.system("present", errno: -rc)
         }
