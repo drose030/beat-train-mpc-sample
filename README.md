@@ -83,6 +83,10 @@ Song folders made for Clone Hero work as they are, and many are shared online.
 Rock Band packages (`_rb3con`, `.mogg`) and Opus audio don't work. Convert those to
 a Clone Hero folder first, for example with Onyx.
 
+No chart for a song you like? [Trackyard](https://github.com/drose030/trackyard)
+makes one from the audio (MP3, WAV, OGG or FLAC) on your computer, lets you fix it in an editor and
+saves it as a song folder for the card.
+
 ## If something goes wrong
 
 - **No question when you put the card in:**
