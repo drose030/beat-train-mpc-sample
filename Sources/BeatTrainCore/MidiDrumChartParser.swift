@@ -27,14 +27,22 @@ enum MidiDrumChartParserError: Error, LocalizedError {
 /// Parses Standard MIDI Files into a `DrumChart`. Operates on in-memory `Data`;
 /// file reading is `DrumChartLoader`'s job. Tick↔seconds lives in `TempoMap`,
 /// drum-colour placement in `DrumTargetMap`.
+///
+/// Pro-drums markers: on a 4-lane chart (no note at base + 5 in any difficulty)
+/// the green lane (base + 4) is a cymbal and lands on orange, unless the floor-tom
+/// marker (112) covers it (marker note-on ≤ tick < note-off); then it lands on
+/// green. The markers apply to every difficulty. Yellow and blue keep their pads
+/// either way, so markers 110 and 111 are not read. 5-lane charts map straight.
 enum MidiDrumChartParser {
+    static let floorTomMarker: UInt8 = 112
+
     static func parse(data: Data, difficulty: DrumDifficulty = .expert) throws -> DrumChart {
         let parsed = try parseTracks(data: data)
         let tempoMap = try TempoMap(ppq: parsed.ppq, changes: parsed.tempoChanges)
 
         let notes = parsed.noteOns
             .compactMap { event -> DrumNoteEvent? in
-                guard let target = mapTarget(from: event.note, difficulty: difficulty) else { return nil }
+                guard let target = mapTarget(from: event, difficulty: difficulty, in: parsed) else { return nil }
                 return DrumNoteEvent(
                     tick: event.tick,
                     timeSec: tempoMap.seconds(forTick: event.tick),
@@ -54,7 +62,7 @@ enum MidiDrumChartParser {
         let parsed = try parseTracks(data: data)
         _ = try TempoMap(ppq: parsed.ppq, changes: parsed.tempoChanges)
         return DrumDifficulty.allCases.filter { difficulty in
-            parsed.noteOns.contains { mapTarget(from: $0.note, difficulty: difficulty) != nil }
+            parsed.noteOns.contains { mapTarget(from: $0, difficulty: difficulty, in: parsed) != nil }
         }
     }
 
@@ -64,6 +72,8 @@ enum MidiDrumChartParser {
         let ppq: Int
         let tempoChanges: [(tick: Int, bpm: Double)]
         let noteOns: [RawNoteOnEvent]
+        let floorTomRanges: [Range<Int>]
+        let isFiveLane: Bool
     }
 
     private static func parseTracks(data: Data) throws -> ParsedFile {
@@ -86,8 +96,17 @@ enum MidiDrumChartParser {
             (tick: $0.tick, bpm: 60_000_000.0 / Double($0.microsecondsPerQuarter))
         }
         let noteOns = selectedTracks.flatMap(\.noteOnEvents)
+        let isFiveLane = noteOns.contains { event in
+            DrumDifficulty.allCases.contains { Int(event.note) == Int($0.midiBaseNote) + 5 }
+        }
 
-        return ParsedFile(ppq: header.division, tempoChanges: tempoChanges, noteOns: noteOns)
+        return ParsedFile(
+            ppq: header.division,
+            tempoChanges: tempoChanges,
+            noteOns: noteOns,
+            floorTomRanges: selectedTracks.flatMap(\.floorTomRanges),
+            isFiveLane: isFiveLane
+        )
     }
 
     private static func parseHeader(_ reader: inout DataReader) throws -> MidiHeader {
@@ -126,6 +145,8 @@ enum MidiDrumChartParser {
         var trackName: String?
         var tempos: [RawTempoEvent] = []
         var noteOns: [RawNoteOnEvent] = []
+        var floorTomStart: Int?
+        var floorTomRanges: [Range<Int>] = []
 
         while reader.offset < trackEnd {
             let delta = try reader.readVariableLengthQuantity()
@@ -192,7 +213,17 @@ enum MidiDrumChartParser {
             let data1 = try reader.readByte()
             let data2: UInt8 = dataLength == 2 ? try reader.readByte() : 0
 
-            if eventType == 0x90, data2 > 0 {
+            let isNoteOn = eventType == 0x90 && data2 > 0
+            let isNoteOff = eventType == 0x80 || (eventType == 0x90 && data2 == 0)
+
+            if data1 == floorTomMarker {
+                if isNoteOn, floorTomStart == nil {
+                    floorTomStart = absoluteTick
+                } else if isNoteOff, let start = floorTomStart {
+                    floorTomRanges.append(start..<absoluteTick)
+                    floorTomStart = nil
+                }
+            } else if isNoteOn {
                 noteOns.append(
                     RawNoteOnEvent(
                         tick: absoluteTick,
@@ -207,8 +238,12 @@ enum MidiDrumChartParser {
         if reader.offset < trackEnd {
             try reader.skip(trackEnd - reader.offset)
         }
+        // A marker left open runs to the end of the track.
+        if let start = floorTomStart {
+            floorTomRanges.append(start..<Int.max)
+        }
 
-        return ParsedTrack(name: trackName, tempoEvents: tempos, noteOnEvents: noteOns)
+        return ParsedTrack(name: trackName, tempoEvents: tempos, noteOnEvents: noteOns, floorTomRanges: floorTomRanges)
     }
 
     private static func selectDrumTracks(from tracks: [ParsedTrack]) -> [ParsedTrack] {
@@ -227,10 +262,15 @@ enum MidiDrumChartParser {
         }
     }
 
-    /// Translates a MIDI note to a canonical drum lane (note − difficulty base) and
-    /// looks up its target in `DrumTargetMap`.
-    private static func mapTarget(from note: UInt8, difficulty: DrumDifficulty) -> DrumTarget? {
-        DrumTargetMap.target(forCanonicalLane: Int(note) - Int(difficulty.midiBaseNote))
+    /// Translates a MIDI note to a canonical drum lane (note − difficulty base, with
+    /// the 4-lane green moved to canonical green under a floor-tom marker) and looks
+    /// up its target in `DrumTargetMap`.
+    private static func mapTarget(from event: RawNoteOnEvent, difficulty: DrumDifficulty, in file: ParsedFile) -> DrumTarget? {
+        var lane = Int(event.note) - Int(difficulty.midiBaseNote)
+        if lane == 4, !file.isFiveLane, file.floorTomRanges.contains(where: { $0.contains(event.tick) }) {
+            lane = 5
+        }
+        return DrumTargetMap.target(forCanonicalLane: lane)
     }
 }
 
@@ -244,6 +284,7 @@ private struct ParsedTrack {
     let name: String?
     let tempoEvents: [RawTempoEvent]
     let noteOnEvents: [RawNoteOnEvent]
+    let floorTomRanges: [Range<Int>]
 }
 
 private struct RawTempoEvent {

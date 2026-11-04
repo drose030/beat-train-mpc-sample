@@ -13,7 +13,9 @@ import Foundation
 /// Each parser translates its own raw note encoding to this canonical index
 /// (MIDI subtracts the difficulty's `midiBaseNote`; `.chart` uses the raw note
 /// number, plus a `32 → kick` quirk) and then looks up here. This keeps the
-/// "which colour lands where" decision in one place.
+/// "which colour lands where" decision in one place. On 4-lane pro-drums charts
+/// the parsers send the green lane to orange (cymbal) or green (floor tom) by its
+/// tom/cymbal marker before the lookup.
 enum DrumTargetMap {
     static func target(forCanonicalLane lane: Int) -> DrumTarget? {
         switch lane {

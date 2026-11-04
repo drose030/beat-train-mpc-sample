@@ -30,7 +30,7 @@ The deep module that owns tick↔seconds conversion for a chart. Built from `ppq
 _Avoid_: "tempo timeline", "tempo segments" (those are its internals).
 
 **DrumTargetMap**:
-The single canonical table mapping a drum lane (0=kick, 1=red, 2=yellow, 3=blue, 4=orange, 5=green) to a **DrumTarget**. Both parsers translate their raw note encoding to this canonical 0–5 index, then look up here.
+The single canonical table mapping a drum lane (0=kick, 1=red, 2=yellow, 3=blue, 4=orange, 5=green) to a **DrumTarget**. Both parsers translate their raw note encoding to this canonical 0–5 index, then look up here. A 4-lane chart's green lane goes to orange when it is a cymbal and to green when it is a floor tom, read from the Clone Hero pro-drums markers: MIDI tom marker 112 (unmarked = cymbal); `.chart` cymbal marker `N 68` on the same tick (unmarked = tom, but only on a pro chart: song.ini `pro_drums = true` or any cymbal marker; a non-pro `.chart` green stays orange). 5-lane charts map straight.
 
 **SongINIParser**:
 Pure parsing of a `song.ini`'s text into metadata fields (title, artist, album, drum difficulty, pro-drums, delay). No file I/O — **SongLibrary** reads the bytes, picks an encoding, applies folder-name defaults, and discovers the notes/audio files.

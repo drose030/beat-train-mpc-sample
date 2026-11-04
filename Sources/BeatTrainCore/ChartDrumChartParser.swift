@@ -20,15 +20,27 @@ enum ChartDrumChartParserError: Error, LocalizedError {
 /// `DrumChartLoader`'s job. Tick↔seconds lives in `TempoMap`, drum-colour placement
 /// in `DrumTargetMap`. A chart with no `[SyncTrack]` tempo data is untimeable and
 /// surfaces as `TempoMap.Failure.noTempo`.
+///
+/// Pro-drums markers: a 4-lane chart (no `N 5` in any drums section) is pro when
+/// song.ini says `pro_drums = true` or any drums section has a cymbal marker
+/// (`N 66`–`68`). On a pro chart `N 4` (green) is a tom and lands on green, unless
+/// a cymbal marker `N 68` sits on the same tick; then it lands on orange. On a
+/// non-pro 4-lane chart `N 4` lands on orange, the same as an unmarked MIDI green.
+/// Yellow and blue keep their pads either way. 5-lane charts map straight.
 enum ChartDrumChartParser {
-    static func parse(data: Data, difficulty: DrumDifficulty) throws -> DrumChart {
+    static let greenCymbalMarker = 68
+
+    static func parse(data: Data, difficulty: DrumDifficulty, proDrums: Bool) throws -> DrumChart {
         let parsed = try parseSections(data: data)
         let tempoMap = try TempoMap(ppq: parsed.resolution, changes: parsed.tempoChanges)
 
         let sectionName = "\(difficulty.chartSectionPrefix)Drums"
         let rawNotes = parsed.noteEventsBySection[sectionName] ?? []
+        let greenIsTom = !parsed.isFiveLane && (proDrums || parsed.hasCymbalMarkers)
+        let greenCymbalTicks = Set(rawNotes.filter { $0.noteNumber == greenCymbalMarker }.map(\.tick))
         let notes = rawNotes.compactMap { event -> DrumNoteEvent? in
-            guard let target = mapTarget(fromChartNote: event.noteNumber) else { return nil }
+            let isFloorTom = greenIsTom && !greenCymbalTicks.contains(event.tick)
+            guard let target = mapTarget(fromChartNote: event.noteNumber, greenIsTom: isFloorTom) else { return nil }
             return DrumNoteEvent(
                 tick: event.tick,
                 timeSec: tempoMap.seconds(forTick: event.tick),
@@ -48,7 +60,7 @@ enum ChartDrumChartParser {
         return DrumDifficulty.allCases.filter { difficulty in
             let sectionName = "\(difficulty.chartSectionPrefix)Drums"
             guard let events = parsed.noteEventsBySection[sectionName], !events.isEmpty else { return false }
-            return events.contains(where: { mapTarget(fromChartNote: $0.noteNumber) != nil })
+            return events.contains(where: { mapTarget(fromChartNote: $0.noteNumber, greenIsTom: false) != nil })
         }
     }
 }
@@ -58,6 +70,14 @@ private extension ChartDrumChartParser {
         let resolution: Int
         let tempoChanges: [(tick: Int, bpm: Double)]
         let noteEventsBySection: [String: [ChartNoteEvent]]
+
+        var isFiveLane: Bool {
+            noteEventsBySection.values.contains { $0.contains { $0.noteNumber == 5 } }
+        }
+
+        var hasCymbalMarkers: Bool {
+            noteEventsBySection.values.contains { $0.contains { (66...68).contains($0.noteNumber) } }
+        }
     }
 
     struct ChartNoteEvent {
@@ -161,9 +181,11 @@ private extension ChartDrumChartParser {
     }
 
     /// Translates a raw `.chart` drum note to a canonical drum lane (note 32 is the
-    /// expert+ kick alias) and looks up its target in `DrumTargetMap`.
-    static func mapTarget(fromChartNote note: Int) -> DrumTarget? {
+    /// expert+ kick alias, a tom-green note 4 is canonical green) and looks up its
+    /// target in `DrumTargetMap`.
+    static func mapTarget(fromChartNote note: Int, greenIsTom: Bool) -> DrumTarget? {
         if note == 32 { return DrumTargetMap.target(forCanonicalLane: 0) }
+        if note == 4, greenIsTom { return DrumTargetMap.target(forCanonicalLane: 5) }
         return DrumTargetMap.target(forCanonicalLane: note)
     }
 }

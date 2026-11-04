@@ -11,6 +11,7 @@ public struct SongMetadata: Identifiable, Equatable, Hashable, Sendable {
     public let album: String?
     public let hasDrumTrack: Bool
     public let drumDifficulty: Int?
+    public let hasProDrums: Bool
     public let chartDelayMilliseconds: Double
     public let songFolderURL: URL
     public let notesURL: URL?

@@ -101,7 +101,7 @@ if arguments.contains("--list") {
     for song in songs {
         guard let notesURL = song.notesURL else { continue }
         let charts = DrumDifficulty.allCases.compactMap { difficulty -> String? in
-            guard let chart = try? DrumChartLoader.parse(from: notesURL, difficulty: difficulty), !chart.notes.isEmpty else { return nil }
+            guard let chart = try? DrumChartLoader.parse(from: notesURL, difficulty: difficulty, proDrums: song.hasProDrums), !chart.notes.isEmpty else { return nil }
             return "\(difficulty.rawValue) \(chart.notes.count)"
         }
         log("\(song.artist) - \(song.title): \(charts.isEmpty ? "no drum chart" : charts.joined(separator: ", "))")

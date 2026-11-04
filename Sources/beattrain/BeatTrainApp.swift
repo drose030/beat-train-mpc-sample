@@ -315,7 +315,7 @@ final class BeatTrainApp {
         guard let notesURL = song.notesURL else { return }
         let chart: DrumChart
         do {
-            chart = try DrumChartLoader.parse(from: notesURL, difficulty: difficulty)
+            chart = try DrumChartLoader.parse(from: notesURL, difficulty: difficulty, proDrums: song.hasProDrums)
         } catch {
             message = ("Chart error: \(error)", now + 3)
             screen = .library

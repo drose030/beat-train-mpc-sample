@@ -68,6 +68,7 @@ public enum SongLibrary {
             album: parsed.album,
             hasDrumTrack: parsed.hasProDrums || parsed.drumDifficulty != nil,
             drumDifficulty: parsed.drumDifficulty,
+            hasProDrums: parsed.hasProDrums,
             chartDelayMilliseconds: parsed.chartDelayMilliseconds,
             songFolderURL: folderURL,
             notesURL: firstExisting(["notes.mid", "notes.midi", "notes.chart"], in: folderURL),

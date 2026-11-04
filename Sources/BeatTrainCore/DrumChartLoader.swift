@@ -31,13 +31,15 @@ public enum DrumChartLoader {
         }
     }
 
-    public static func parse(from fileURL: URL, difficulty: DrumDifficulty) throws -> DrumChart {
+    /// `proDrums` is song.ini's `pro_drums`; only `.chart` files need it (see
+    /// `ChartDrumChartParser`), MIDI carries its own tom markers.
+    public static func parse(from fileURL: URL, difficulty: DrumDifficulty, proDrums: Bool = false) throws -> DrumChart {
         let data = try Data(contentsOf: fileURL)
         switch fileURL.pathExtension.lowercased() {
         case "mid", "midi":
             return try MidiDrumChartParser.parse(data: data, difficulty: difficulty)
         case "chart":
-            return try ChartDrumChartParser.parse(data: data, difficulty: difficulty)
+            return try ChartDrumChartParser.parse(data: data, difficulty: difficulty, proDrums: proDrums)
         default:
             throw DrumChartLoaderError.unsupportedFormat(fileURL.pathExtension)
         }

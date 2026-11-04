@@ -9,7 +9,7 @@ struct SongPlaybackTests {
     /// A song without stem files (its folder does not exist), with a chart delay.
     private func song(delayMs: Double = 0) -> SongMetadata {
         let folder = URL(fileURLWithPath: "/nonexistent/beattrain-test-song")
-        return SongMetadata(id: folder.path, title: "T", artist: "A", album: nil, hasDrumTrack: true, drumDifficulty: nil,
+        return SongMetadata(id: folder.path, title: "T", artist: "A", album: nil, hasDrumTrack: true, drumDifficulty: nil, hasProDrums: false,
                             chartDelayMilliseconds: delayMs, songFolderURL: folder, notesURL: nil, audioURL: nil)
     }
 
