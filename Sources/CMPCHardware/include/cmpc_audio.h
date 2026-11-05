@@ -41,6 +41,13 @@ double cmpc_audio_position(cmpc_audio *audio);
 double cmpc_audio_duration(cmpc_audio *audio);
 /// 1 once every stem has played to its end.
 int cmpc_audio_finished(cmpc_audio *audio);
+/// Song speed, 0.5-1 (clamped), at the same pitch; applies within a few
+/// milliseconds. The position counts song seconds, so it runs slower too.
+void cmpc_audio_set_speed(cmpc_audio *audio, double speed);
+double cmpc_audio_speed(cmpc_audio *audio);
+/// Since the last call: device underruns (heard as clicks), and the average and
+/// longest time mixing one period took, in seconds. Resets them.
+void cmpc_audio_take_stats(cmpc_audio *audio, unsigned *underruns, double *mix_average, double *mix_longest);
 
 /// One-shot effects (miss sound, metronome click) live in a few slots.
 #define CMPC_AUDIO_EFFECT_SLOTS 4

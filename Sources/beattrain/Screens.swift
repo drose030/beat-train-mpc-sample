@@ -294,6 +294,9 @@ extension BeatTrainApp {
         if !playback.hasMusic {
             canvas.drawText("NO AUDIO", x: x, y: 176, Theme.miss)
         }
+        if playback.speed < 1 {
+            canvas.drawText("SPEED \(Self.percent(playback.speed))", x: x, y: 188, Theme.accent)
+        }
         for (row, hint) in hints.footer.enumerated() {
             canvas.drawText(hint, x: x, y: 214 + row * 12, Theme.dim)
         }
@@ -389,11 +392,19 @@ extension BeatTrainApp {
 
         let y = canvas.height - 12
         canvas.drawText(hints.footer.joined(separator: "  "), x: 4, y: y, Theme.dim)
+        // Right-aligned, from the right: no audio or the offset, then the speed.
+        var edge = canvas.width - 4
         if !playback.hasMusic {
-            canvas.drawText("NO AUDIO", x: canvas.width - Canvas.textWidth("NO AUDIO") - 4, y: y, Theme.miss)
+            edge -= Canvas.textWidth("NO AUDIO")
+            canvas.drawText("NO AUDIO", x: edge, y: y, Theme.miss)
         } else if timingOffsetMs != 0 {
             let offset = "OFFSET \(Self.signed(timingOffsetMs))MS"
-            canvas.drawText(offset, x: canvas.width - Canvas.textWidth(offset) - 4, y: y, Theme.dim)
+            edge -= Canvas.textWidth(offset)
+            canvas.drawText(offset, x: edge, y: y, Theme.dim)
+        }
+        if playback.speed < 1 {
+            let speed = "SPEED \(Self.percent(playback.speed))"
+            canvas.drawText(speed, x: edge - Canvas.textWidth(speed) - (edge < canvas.width - 4 ? 12 : 0), y: y, Theme.accent)
         }
     }
 
@@ -469,7 +480,8 @@ extension BeatTrainApp {
         drawFooter(into: &canvas)
         let score = session.score
         canvas.drawText(fit(song.title, 25), x: 10, y: 24, scale: 2, Theme.text)
-        canvas.drawText(fit("\(song.artist) - \(difficulty.rawValue.uppercased())", 50), x: 10, y: 44, Theme.dim)
+        let speed = playback.speed < 1 ? " AT \(Self.percent(playback.speed)) SPEED" : ""
+        canvas.drawText(fit("\(song.artist) - \(difficulty.rawValue.uppercased())\(speed)", 50), x: 10, y: 44, Theme.dim)
         let accuracy = "\(Int((session.accuracy * 100).rounded()))%"
         canvas.drawText(accuracy, x: 10, y: 66, scale: 5, Theme.accent)
         let rows: [(String, String)] = [

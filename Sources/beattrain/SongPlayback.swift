@@ -20,7 +20,7 @@ import MPCHardware
 /// Once the count-in is over the clock is the engine's position, stems or not
 /// (an engine without stems still counts, so clicks land on the beat). Without
 /// an engine (previews, tests) a timer stands in. Either way the chart delay and
-/// the player's timing offset apply.
+/// the player's timing offset apply, and the song may run slower (`speed`).
 final class SongPlayback {
     static let leadInSec = 3.0
     /// The stems the original game plays, in its order; all present ones play together.
@@ -31,6 +31,9 @@ final class SongPlayback {
     static let mutedDrumsGain: Float = 0.2
     /// How far ahead metronome clicks are handed to the audio engine.
     static let clickLookaheadSec = 0.3
+    /// The song speeds there are, for practising: slower at the same pitch.
+    static let speedRange = 0.5...1.0
+    static let speedStep = 0.05
 
     /// The one-shot sounds the player can set the level of.
     enum Sound {
@@ -57,6 +60,12 @@ final class SongPlayback {
     private var begun = false
     private var musicStarted = false
     private var nextBeat = 0
+    /// Without an engine, the song clock once the music has started: song seconds
+    /// at monotonic time `at`.
+    private var timer: (base: Double, at: Double)?
+
+    /// Song seconds per second, in `speedRange`. Stays for the next songs; not saved.
+    private(set) var speed = 1.0
 
     /// Monotonic time at which the count-in ends and the music starts.
     private(set) var startsAt = 0.0
@@ -123,6 +132,7 @@ final class SongPlayback {
         applyGains()
         begun = true
         musicStarted = false
+        timer = nil
         nextBeat = 0
         pausedAt = nil
         startsAt = now + Self.leadInSec
@@ -143,6 +153,7 @@ final class SongPlayback {
     func resume(now: Double) {
         guard let pausedAt else { return }
         if !musicStarted { startsAt += now - pausedAt }
+        timer?.at += now - pausedAt
         self.pausedAt = nil
         if musicStarted { audio?.play() }
     }
@@ -166,14 +177,30 @@ final class SongPlayback {
     /// Chart seconds at `now`: negative during the count-in, then the song clock
     /// shifted by the chart delay and the timing offset.
     func chartTime(now: Double) -> Double {
-        let clock: Double
-        if musicStarted, let audio {
-            clock = audio.position
-        } else {
-            clock = (pausedAt ?? now) - startsAt
-        }
+        let clock = songClock(now: now)
         guard clock >= 0 else { return clock }
-        return GameSession.chartTime(audioTime: clock, chartDelayMs: song?.chartDelayMilliseconds ?? 0, timing: settings.timing)
+        // The offset makes up for delays in real time (sound out, strike in), which
+        // are fewer song seconds when the song runs slower.
+        let timing = settings.timing
+        let scaled = TimingConfiguration(totalSec: timing.hitWindowTotalSec, frontSec: timing.hitWindowFrontSec,
+                                         offsetMs: timing.timingOffsetMs * speed)
+        return GameSession.chartTime(audioTime: clock, chartDelayMs: song?.chartDelayMilliseconds ?? 0, timing: scaled)
+    }
+
+    /// Song seconds: the count-in (real seconds, negative), then the engine or the timer.
+    private func songClock(now: Double) -> Double {
+        if musicStarted, let audio { return audio.position }
+        if let timer { return timer.base + ((pausedAt ?? now) - timer.at) * speed }
+        return (pausedAt ?? now) - startsAt
+    }
+
+    /// Sets the song speed, rounded to `speedStep` and kept in `speedRange`.
+    func setSpeed(_ value: Double, now: Double) {
+        let rounded = min(max((value / Self.speedStep).rounded() * Self.speedStep, Self.speedRange.lowerBound), Self.speedRange.upperBound)
+        guard rounded != speed else { return }
+        if timer != nil { timer = (songClock(now: now), pausedAt ?? now) }
+        speed = rounded
+        audio?.speed = rounded
     }
 
     /// Starts the music when the count-in is over and hands the engine the next
@@ -183,6 +210,7 @@ final class SongPlayback {
         if !musicStarted, now >= startsAt {
             audio?.play()
             musicStarted = true
+            if audio == nil { timer = (now - startsAt, now) }
         }
         scheduleClicks()
     }

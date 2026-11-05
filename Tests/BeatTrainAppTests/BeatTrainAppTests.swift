@@ -55,6 +55,30 @@ struct BeatTrainAppTests {
     }
 }
 
+struct SpeedFaderTests {
+    @Test func theFaderAloneDoesNothing() {
+        let app = BeatTrainApp(songs: [], songRoots: [], audio: nil)
+        app.handle(.control(.fader, value: 127), now: 0)
+        app.handle(.control(.fader, value: 0), now: 0)
+        #expect(app.playback.speed == 1)
+    }
+
+    @Test func shiftAndFaderSetTheSpeedByTheFadersTravel() {
+        let app = BeatTrainApp(songs: [], songRoots: [], audio: nil)
+        app.handle(.control(.fader, value: 127), now: 0)            // where it stands
+        app.handle(.button(.shift, pressed: true), now: 0)
+        app.handle(.control(.fader, value: 64), now: 0)             // half way down
+        #expect(app.playback.speed == 0.75)
+        #expect(app.message?.text == "SPEED 75%")
+        app.handle(.button(.shift, pressed: false), now: 0)
+        app.handle(.control(.fader, value: 0), now: 0)              // moved without SHIFT
+        #expect(app.playback.speed == 0.75)
+        app.handle(.button(.shift, pressed: true), now: 0)
+        app.handle(.control(.fader, value: 127), now: 0)            // all the way up
+        #expect(app.playback.speed == 1)
+    }
+}
+
 struct PadSetupTests {
     private func openSetup(_ app: BeatTrainApp) {
         app.handle(.button(.screen3, pressed: true), now: 0)

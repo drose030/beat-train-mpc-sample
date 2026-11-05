@@ -61,6 +61,9 @@ final class BeatTrainApp {
     var shiftHeld = false
     private(set) var lifecycle = Lifecycle.running
     var message: (text: String, until: Double)?
+    /// The fader's last report, and the speed it has turned to while SHIFT is held.
+    private var faderLast: UInt8?
+    private var faderSpeed: Double?
     /// The start picture, over everything until it is over.
     var splash: Splash?
 
@@ -117,6 +120,29 @@ final class BeatTrainApp {
 
     /// The power key: ask before shutting down, as the stock app does. A song
     /// pauses meanwhile.
+    /// SHIFT+FADER sets the song speed by how far the fader moves (its whole travel
+    /// is the whole range), so a fader left anywhere does not make it jump. Without
+    /// SHIFT the fader does nothing, so it cannot be changed by accident.
+    private func moveFader(to value: UInt8, now: Double) {
+        defer { faderLast = value }
+        guard shiftHeld, let last = faderLast else {
+            faderSpeed = nil
+            return
+        }
+        let range = SongPlayback.speedRange
+        var speed = faderSpeed ?? playback.speed
+        speed += Double(Int(value) - Int(last)) / 127 * (range.upperBound - range.lowerBound)
+        speed = min(max(speed, range.lowerBound), range.upperBound)
+        faderSpeed = speed
+        playback.setSpeed(speed, now: now)
+        message = ("SPEED \(Self.percent(playback.speed))", now + 1.5)
+    }
+
+    /// "75%".
+    static func percent(_ value: Double) -> String {
+        "\(Int((value * 100).rounded()))%"
+    }
+
     func powerButtonPressed(now: Double) {
         guard lifecycle == .running else { return }
         lifecycle = .askingToShutDown
@@ -146,6 +172,9 @@ final class BeatTrainApp {
             return
         case let .control(.mainVolume, value):
             playback.setMainVolume(value)
+            return
+        case let .control(.fader, value):
+            moveFader(to: value, now: now)
             return
         case let .control(control, value) where SettingsKeeper.knobs.contains(where: { $0.control == control }):
             if let item = keeper.turn(control, to: value, now: now) {

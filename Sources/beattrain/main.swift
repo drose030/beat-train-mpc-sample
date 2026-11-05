@@ -238,10 +238,17 @@ while stopRequested == 0 && !app.lifecycle.isOver {
         if elapsed >= 10 {
             let fps = Double(frameStats.frames) / elapsed
             log("display \(sweep): \(Int(fps.rounded())) fps, frame \(Int((frameStats.total / Double(frameStats.frames) * 1000).rounded())) ms on average, \(Int((frameStats.longest * 1000).rounded())) ms at most")
+            if let audio {
+                // A period is 512 frames, 11.6 ms: mixing must stay well below.
+                let stats = audio.takeStats()
+                let ms = { (sec: Double) in String(Double(Int(sec * 10000)) / 10) }
+                log("audio at \(BeatTrainApp.percent(app.playback.speed)): \(stats.underruns) underruns, mixing \(ms(stats.mixAverage)) ms on average, \(ms(stats.mixLongest)) ms at most")
+            }
             frameStats = (monotonicSeconds(), 0, 0, 0)
         }
     } else {
         frameStats = (monotonicSeconds(), 0, 0, 0)
+        _ = audio?.takeStats()
     }
 
     if let surface {

@@ -113,6 +113,89 @@ struct AudioEngineTests {
         #expect(peak(engine.render(frames: 2048)) == 0)
     }
 
+    /// A mono 16-bit WAV of a sine at half level.
+    private static func sineWAV(hz: Double, seconds: Double) -> [UInt8] {
+        let samples = (0..<Int(seconds * Double(rate))).map { Int16(16384 * sin(2 * Double.pi * hz * Double($0) / Double(rate))) }
+        func le(_ value: Int, _ bytes: Int) -> [UInt8] { (0..<bytes).map { UInt8((value >> (8 * $0)) & 0xFF) } }
+        let data = samples.flatMap { le(Int(UInt16(bitPattern: $0)), 2) }
+        let format = le(1, 2) + le(1, 2) + le(Int(rate), 4) + le(Int(rate) * 2, 4) + le(2, 2) + le(16, 2)
+        let chunks = Array("fmt ".utf8) + le(format.count, 4) + format + Array("data".utf8) + le(data.count, 4) + data
+        return Array("RIFF".utf8) + le(4 + chunks.count, 4) + Array("WAVE".utf8) + chunks
+    }
+
+    /// The left channel of interleaved stereo.
+    private func left(_ samples: [Float]) -> [Float] {
+        stride(from: 0, to: samples.count, by: 2).map { samples[$0] }
+    }
+
+    @Test func atFullSpeedTheOutputIsTheSong() throws {
+        let engine = AudioEngine(offlineRate: Self.rate)
+        try engine.addStem(encoded: Self.sineWAV(hz: 440, seconds: 1))
+        engine.play()
+        let out = left(engine.render(frames: 4096))
+        let expected = (0..<4096).map { Float(Int16(16384 * sin(2 * Double.pi * 440 * Double($0) / Double(Self.rate)))) / 32768 }
+        #expect(zip(out, expected).allSatisfy { abs($0 - $1) < 1e-4 }, "sample for sample, from the first frame")
+    }
+
+    @Test func halfSpeedKeepsThePitchAndTheLevel() throws {
+        let engine = AudioEngine(offlineRate: Self.rate)
+        try engine.addStem(encoded: Self.sineWAV(hz: 440, seconds: 2))
+        engine.speed = 0.5
+        engine.play()
+        let out = left(engine.render(frames: Int(Self.rate)))
+        #expect(abs(engine.position - 0.5) < 0.001, "one second of output is half a second of song")
+        // Rising zero crossings over half a second: 220 for 440 Hz.
+        let part = Array(out[11025..<33075])
+        let crossings = zip(part, part.dropFirst()).filter { $0 < 0 && $1 >= 0 }.count
+        #expect(abs(crossings - 220) <= 4, "\(crossings) crossings")
+        // No dips where the segments overlap: every 10 ms keeps the sine's level.
+        for block in stride(from: 2048, to: out.count - 441, by: 441) {
+            #expect(abs(out[block..<block + 441].map(abs).max()! - 0.5) < 0.05, "level at frame \(block)")
+        }
+    }
+
+    @Test func speedChangesApplyAsTheSongRuns() throws {
+        let engine = AudioEngine(offlineRate: Self.rate)
+        try engine.addStem(encoded: Self.sineWAV(hz: 440, seconds: 2))
+        engine.play()
+        _ = engine.render(frames: 22050)
+        engine.speed = 0.5
+        _ = engine.render(frames: 22050)
+        #expect(abs(engine.position - 0.75) < 0.015, "0.5 s at full speed, then 0.25 s at half: \(engine.position)")
+        engine.speed = 0.2
+        #expect(engine.speed == 0.5, "no slower than half")
+    }
+
+    @Test func slowingDownMidSongStaysSmooth() throws {
+        let engine = AudioEngine(offlineRate: Self.rate)
+        try engine.addStem(encoded: Self.sineWAV(hz: 440, seconds: 3))
+        engine.play()
+        var out = left(engine.render(frames: 10000))
+        // Slowing down in steps, as the fader does, then back up.
+        for speed in [0.95, 0.9, 0.75, 0.5, 0.75, 1.0] {
+            engine.speed = speed
+            out += left(engine.render(frames: 5000))
+        }
+        // A 440 Hz sine at half level never moves more than 0.032 from one frame to the next.
+        let jumps = zip(out, out.dropFirst()).enumerated().filter { abs($1.1 - $1.0) > 0.04 }.map(\.offset)
+        #expect(jumps.isEmpty, "jumps at frames \(jumps.prefix(5))")
+        for block in stride(from: 1024, to: out.count - 441, by: 441) {
+            #expect(abs(out[block..<block + 441].map(abs).max()! - 0.5) < 0.05, "level at frame \(block)")
+        }
+    }
+
+    @Test func scheduledEffectFollowsTheSlowerSong() throws {
+        let engine = AudioEngine(offlineRate: Self.rate)
+        let silent = try engine.addStem(encoded: Self.fixture)
+        engine.setGain(0, forStem: silent)
+        try engine.loadEffect(slot: 1, samples: [Float](repeating: 0.5, count: 100), rate: Self.rate)
+        engine.scheduleEffect(slot: 1, atSongTime: 1000.0 / Double(Self.rate))  // song frame 1000
+        engine.speed = 0.5
+        engine.play()
+        let out = left(engine.render(frames: 4096))
+        #expect(out.firstIndex { $0 != 0 } == 2000, "song frame 1000 is output frame 2000")
+    }
+
     @Test func garbageIsNotAStem() {
         let engine = AudioEngine(offlineRate: Self.rate)
         #expect(throws: HardwareError.self) { try engine.addStem(encoded: [0, 1, 2, 3]) }

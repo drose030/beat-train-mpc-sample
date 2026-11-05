@@ -22,6 +22,9 @@ One of the 4 vertical columns of the note highway. Distinct from the 6 canonical
 **Row**:
 Top or bottom half of a lane — encodes the 2-pad-per-lane play style.
 
+**Song speed**:
+How fast the song plays, 50–100 %, for practising (SHIFT+FADER). Slower at the same pitch; chart time is song time, so the notes and the hit window slow down with it. Not saved; distinct from a song's tempo (**TempoMap**).
+
 **Highway layout**:
 Which way the note highway runs on the play screen: vertical (4 **Lanes**, notes come down, each note's halves are the two **Rows**) or horizontal (one row per **Pad** the chart uses, notes run right to left). A **PlayerSettings** value. Distinct from **Row**, which is part of a **DrumTarget**.
 

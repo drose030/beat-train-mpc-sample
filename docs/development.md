@@ -80,6 +80,16 @@ The pads light in their drum colour and flash when struck. The two rows are
 swapped against the original game (snare row at the bottom); the highway draws each
 note's upper half for the upper pad row.
 
+**Song speed** (SHIFT+FADER, 50–100 % in 5 % steps): the fader moves the speed by
+how far it travels, not to where it stands, so a fader left anywhere does not make it
+jump, and alone it does nothing. The audio engine stretches the mixed stems in time at
+the same pitch (WSOLA: overlapping 23 ms segments, each moved up to 4 ms to where it
+best continues the last); at 100 % the output is the song sample for sample. The
+engine's clock counts song seconds, so the notes, the metronome and the hit window
+run in song time; the timing offset makes up for real-time delays and is scaled down
+with the speed. The speed stays for the next songs until the app ends and shows on
+the play screen and the results.
+
 The horizontal highway (settings: HIGHWAY) runs the notes right to left with one row
 per pad, cymbals at the top and the kick at the bottom; only the pads the chart's
 notes fall on get a row. A 4×2 map of the panel at the left of each row shows its pad.

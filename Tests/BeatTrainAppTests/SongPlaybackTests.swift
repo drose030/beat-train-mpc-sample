@@ -23,6 +23,32 @@ struct SongPlaybackTests {
         #expect(abs(playback.chartTime(now: 14) - 0.88) < 1e-9, "1 s minus 100 ms delay minus 20 ms offset")
     }
 
+    @Test func slowerSpeedSlowsTheClockAndTheOffset() {
+        let playback = SongPlayback(audio: nil)
+        playback.apply(PlayerSettings(timingOffsetMs: 20))
+        playback.load(song(), beatTimes: [])
+        playback.begin(now: 0)
+        playback.tick(now: 3)
+        playback.setSpeed(0.5, now: 4)
+        // 1 s at full speed, 2 s at half; the 20 ms offset is 10 ms of song.
+        #expect(abs(playback.chartTime(now: 6) - (2 - 0.01)) < 1e-9)
+        playback.pause(now: 6)
+        playback.resume(now: 10)
+        #expect(abs(playback.chartTime(now: 12) - (3 - 0.01)) < 1e-9, "paused time does not count")
+    }
+
+    @Test func speedIsRoundedKeptInRangeAndReachesTheEngine() {
+        let audio = AudioEngine(offlineRate: 44100)
+        let playback = SongPlayback(audio: audio)
+        playback.setSpeed(0.73, now: 0)
+        #expect(playback.speed == 0.75)
+        #expect(audio.speed == 0.75)
+        playback.setSpeed(0.2, now: 0)
+        #expect(playback.speed == 0.5)
+        playback.setSpeed(2, now: 0)
+        #expect(playback.speed == 1)
+    }
+
     @Test func pauseHoldsTheCountIn() {
         let playback = SongPlayback(audio: nil)
         playback.load(song(), beatTimes: [])
