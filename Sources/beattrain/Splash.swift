@@ -49,8 +49,13 @@ struct Splash {
         }
     }
 
-    /// The picture, centred.
+    /// The picture, centred, with the version on a dark plate in the bottom right
+    /// corner.
     func draw(into canvas: inout Canvas) {
         canvas.draw(image, x: (canvas.width - image.width) / 2, y: (canvas.height - image.height) / 2)
+        let text = "v\(BeatTrainApp.version)"
+        let width = Canvas.textWidth(text) + 5
+        canvas.fillRect(x: canvas.width - width, y: canvas.height - 12, width: width, height: 12, .black)
+        canvas.drawText(text, x: canvas.width - width + 3, y: canvas.height - 10, .white)
     }
 }

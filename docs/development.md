@@ -49,6 +49,9 @@ This writes `dist/card/` (what goes on the card: `autorun/` and
 copies only `song.ini`, charts and album art (small, for the lab).
 `scripts/package-autorun.sh beattrain-hwtest` packages the hardware test instead.
 
+For a release, raise `BeatTrainApp.version` first: the start picture shows it in
+its bottom right corner, and the log names it.
+
 ## Gameplay details
 
 The rules behind the README's short version.

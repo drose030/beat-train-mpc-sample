@@ -84,6 +84,7 @@ func renderPreviews(app: BeatTrainApp, into directory: String) {
 let arguments = CommandLine.arguments
 let roots = StartupPaths.songRoots(arguments: arguments, environmentSongs: getenv("BEATTRAIN_SONGS").map { String(cString: $0) })
 let songs = roots.flatMap { SongLibrary.scan(root: URL(fileURLWithPath: $0)) }
+log("Beat-Train \(BeatTrainApp.version)")
 log("songs: \(songs.count) in \(roots)")
 
 if arguments.contains("--list") {

@@ -673,9 +673,11 @@ struct SplashTests {
         #expect(app.splash == nil)
     }
 
-    @Test func drawsCentred() {
+    @Test func drawsCentredWithTheVersionInTheCorner() {
         var canvas = Canvas(width: 320, height: 240)
         Splash(image: Canvas(width: 2, height: 2, fill: .white), since: 0).draw(into: &canvas)
         #expect(canvas.pixel(x: 159, y: 119) == .white && canvas.pixel(x: 158, y: 119) == .black)
+        let plate = Canvas.textWidth("v\(BeatTrainApp.version)") + 5
+        #expect((0..<plate).contains { canvas.pixel(x: 319 - $0, y: 235) == .white }, "the version, bottom right")
     }
 }

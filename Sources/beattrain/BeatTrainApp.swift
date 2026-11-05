@@ -50,6 +50,9 @@ struct ControlHints: Equatable {
 /// The game's screens and their input handling. Time comes in as `now`, and audio
 /// is optional, so it runs the same on the device and in previews.
 final class BeatTrainApp {
+    /// The release, on the start picture and in the log. Raised with each release.
+    static let version = "1.5"
+
     let songs: [SongMetadata]
     let songRoots: [String]
     let playback: SongPlayback
