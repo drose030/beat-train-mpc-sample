@@ -9,9 +9,10 @@ enum SettingsItem: Equatable {
     case metronome
     case missSound
     case highway
+    case strikeLine
     case stem(String)
 
-    static let all: [SettingsItem] = [.timingOffset, .hitWindow, .earlyWindow, .metronome, .missSound, .highway]
+    static let all: [SettingsItem] = [.timingOffset, .hitWindow, .earlyWindow, .metronome, .missSound, .highway, .strikeLine]
         + SongPlayback.stemNames.map { .stem($0) }
 
     var title: String {
@@ -22,6 +23,7 @@ enum SettingsItem: Equatable {
         case .metronome: "METRONOME"
         case .missSound: "MISS SOUND"
         case .highway: "HIGHWAY"
+        case .strikeLine: "  STRIKE LINE"
         case let .stem(name): "STEM \(name.uppercased())"
         }
     }
@@ -31,7 +33,7 @@ enum SettingsItem: Equatable {
         switch self {
         case .timingOffset, .hitWindow, .earlyWindow: 5
         case .metronome, .missSound, .stem: 0.05
-        case .highway: 1
+        case .highway, .strikeLine: 1
         }
     }
 
@@ -41,6 +43,7 @@ enum SettingsItem: Equatable {
         case .timingOffset: 2 * TimingConfiguration.offsetRangeMs
         case .hitWindow, .earlyWindow: 200
         case .metronome, .missSound, .stem, .highway: 1
+        case .strikeLine: Double(StrikeLinePosition.allCases.count - 1)
         }
     }
 
@@ -54,6 +57,8 @@ enum SettingsItem: Equatable {
             0...TimingConfiguration.maxFront(forTotal: settings.hitWindowMs / 1000) * 1000
         case .metronome, .missSound, .stem, .highway:
             0...1
+        case .strikeLine:
+            0...Double(StrikeLinePosition.allCases.count - 1)
         }
     }
 
@@ -65,6 +70,7 @@ enum SettingsItem: Equatable {
         case .metronome: settings.metronomeVolume
         case .missSound: settings.missSoundVolume
         case .highway: settings.highwayLayout == .horizontal ? 1 : 0
+        case .strikeLine: Double(StrikeLinePosition.allCases.firstIndex(of: settings.strikeLine) ?? 0)
         case let .stem(name): settings.stemVolume(name)
         }
     }
@@ -79,6 +85,9 @@ enum SettingsItem: Equatable {
         case .metronome: settings.metronomeVolume = rounded
         case .missSound: settings.missSoundVolume = rounded
         case .highway: settings.highwayLayout = rounded >= 1 ? .horizontal : .vertical
+        case .strikeLine:
+            let positions = StrikeLinePosition.allCases
+            settings.strikeLine = positions[min(max(Int(rounded), 0), positions.count - 1)]
         case let .stem(name): settings.stemVolumes[name] = rounded
         }
     }
@@ -93,6 +102,13 @@ enum SettingsItem: Equatable {
         case .timingOffset: return "\(BeatTrainApp.signed(value)) MS"
         case .hitWindow, .earlyWindow: return "\(Int(value.rounded())) MS"
         case .highway: return settings.highwayLayout == .horizontal ? "HORIZONTAL" : "VERTICAL"
+        case .strikeLine:
+            switch settings.strikeLine {
+            case .edge: return settings.highwayLayout == .horizontal ? "LEFT" : "BOTTOM"
+            case .quarter: return "1/4"
+            case .third: return "1/3"
+            case .middle: return "MIDDLE"
+            }
         case .metronome, .missSound, .stem:
             return value == 0 ? "OFF" : "\(Int((value * 100).rounded()))%"
         }

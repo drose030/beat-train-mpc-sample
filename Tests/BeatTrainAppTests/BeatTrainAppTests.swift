@@ -162,6 +162,21 @@ struct SettingsScreenTests {
         #expect(app.settings.highwayLayout == .vertical)
     }
 
+    @Test func strikeLineStepsThroughItsPositions() {
+        let app = BeatTrainApp(songs: [], songRoots: [], audio: nil)
+        app.handle(.button(.screen2, pressed: true), now: 0)
+        app.handle(.encoder(delta: SettingsItem.all.firstIndex(of: .strikeLine)!), now: 0)
+        app.handle(.button(.dataPush, pressed: true), now: 0)
+        let texts = (0..<4).map { _ -> String in
+            app.handle(.encoder(delta: 1), now: 0)
+            return SettingsItem.strikeLine.text(in: app.settings)
+        }
+        #expect(texts == ["1/4", "1/3", "MIDDLE", "MIDDLE"])
+        app.handle(.button(.erase, pressed: true), now: 0)
+        #expect(app.settings.strikeLine == .edge)
+        #expect(SettingsItem.strikeLine.text(in: app.settings) == "BOTTOM")
+    }
+
     @Test func theListScrollsToShowTheLastLine() {
         let app = BeatTrainApp(songs: [], songRoots: [], audio: nil)
         app.handle(.button(.screen2, pressed: true), now: 0)
@@ -397,7 +412,7 @@ struct SongEndTests {
 
     @Test func horizontalHighwayJudgesOnTheStruckPadsRow() throws {
         defer { try? FileManager.default.removeItem(at: root) }
-        let (app, _) = try makeApp()
+        let (app, audio) = try makeApp()
         app.keeper.set(.highway, to: 1, now: 0)
         #expect(app.sweep == .rows, "menus go out row by row")
         let start = startSong(app)
@@ -410,8 +425,36 @@ struct SongEndTests {
         app.render(into: &canvas, now: start)
         // One row, centred: its target box lights up green left of the strike line.
         let top = BeatTrainApp.rowsTop + (BeatTrainApp.rowsBottom - BeatTrainApp.rowsTop - BeatTrainApp.maxRowHeight) / 2
-        #expect(canvas.pixel(x: BeatTrainApp.strikeX - 6, y: top + 10) == Theme.hit)
-        #expect(canvas.pixel(x: BeatTrainApp.strikeX, y: top + 1) == Theme.accent)
+        let strikeX = BeatTrainApp.strikeX(for: .edge)
+        #expect(canvas.pixel(x: strikeX - 6, y: top + 10) == Theme.hit)
+        #expect(canvas.pixel(x: strikeX, y: top + 1) == Theme.accent)
+
+        // In the middle, the note struck a second ago still shows left of the line.
+        app.keeper.set(.strikeLine, to: 3, now: start)
+        let middle = BeatTrainApp.strikeX(for: .middle)
+        #expect(middle == 176)
+        _ = audio.render(frames: 44100)
+        app.render(into: &canvas, now: start + 1)
+        #expect(canvas.pixel(x: middle, y: top + 1) == Theme.accent)
+        #expect(canvas.pixel(x: middle - Int(BeatTrainApp.pixelsPerSecond), y: top + 10) == Theme.text, "the struck note, a second on")
+    }
+
+    @Test func verticalHighwayShowsStruckNotesBelowARaisedLine() throws {
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (app, audio) = try makeApp()
+        app.keeper.set(.strikeLine, to: 3, now: 0)
+        let start = startSong(app)
+        let kick = DrumKit.pad(forLayout: DrumTarget(lane: 0, row: .bottom))
+        app.handle(.padDown(pad: PanelPads.panelPad(forPad: kick), velocity: 100), now: start)
+        _ = audio.render(frames: 22050)
+        var canvas = Canvas(width: 320, height: 240)
+        app.render(into: &canvas, now: start + 0.5)
+        let middle = BeatTrainApp.strikeY(for: .middle)
+        #expect(middle == 108)
+        #expect(canvas.pixel(x: 30, y: middle) == Theme.accent)
+        // Half a second on, the struck kick is 62 px below the line, in white (its
+        // upper half: kicks are on the upper panel row).
+        #expect(canvas.pixel(x: 10, y: middle + 62 - 5) == Theme.text)
     }
 
     @Test func b1RestartsTheSongFromTheStart() throws {

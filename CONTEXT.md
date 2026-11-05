@@ -28,6 +28,9 @@ How fast the song plays, 50–100 %, for practising (SHIFT+FADER). Slower at the
 **Highway layout**:
 Which way the note highway runs on the play screen: vertical (4 **Lanes**, notes come down, each note's halves are the two **Rows**) or horizontal (one row per **Pad** the chart uses, notes run right to left). A **PlayerSettings** value. Distinct from **Row**, which is part of a **DrumTarget**.
 
+**Strike line**:
+The line on the highway where a note is to be struck: chart time 0, notes to come on one side, passed ones on the other. Sits near the end the notes run to, or a quarter, a third or half way in (a **PlayerSettings** value, for both **Highway layouts**); further in shows more passed notes and less of what comes.
+
 **Difficulty**:
 Easy / Medium / Hard / Expert. In MIDI files difficulties live at different note ranges (offset by `midiBaseNote`); in `.chart` files at different `[*Drums]` sections.
 
@@ -72,7 +75,7 @@ One play-through of a **DrumChart**: the note states and the **ScoreState**, adv
 Finds the songs below a folder (every folder with a `song.ini` and a chart) and reads them into `SongMetadata`.
 
 **PlayerSettings**:
-The player's settings that outlive a session (timing offset, hit window, metronome / miss sound / stem volumes, Pad→**DrumVoice** assignment, **Highway layout**), as JSON in `BeatTrain/settings.json` on the card.
+The player's settings that outlive a session (timing offset, hit window, metronome / miss sound / stem volumes, Pad→**DrumVoice** assignment, **Highway layout**, **Strike line** position), as JSON in `BeatTrain/settings.json` on the card.
 
 **DrumKit**:
 The single value type that owns kit geometry — the **Pad**↔**DrumTarget** layout and the **DrumVoice**↔**DrumTarget** canonical bijection — plus the player's two configuration maps: Pad→**DrumVoice** (which voice each pad plays) and Note→**Pad** (which pad a MIDI note triggers). Answers every "where does this land / what colour is it" question. Pure (Foundation only); colour lives in a separate extension (`Theme.swift`).

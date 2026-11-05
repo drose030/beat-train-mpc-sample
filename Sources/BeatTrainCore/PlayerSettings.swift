@@ -19,6 +19,13 @@ public enum HighwayLayout: String, Codable, Sendable {
     case horizontal
 }
 
+/// Where the strike line sits on the highway, from the end the notes run to (the
+/// bottom, or the left): further in shows more of the notes that have passed and
+/// less of those to come.
+public enum StrikeLinePosition: String, Codable, Sendable, CaseIterable {
+    case edge, quarter, third, middle
+}
+
 /// The player's settings that outlive a session, kept as JSON (on the MPC in
 /// `BeatTrain/settings.json` on the card). Missing or unreadable files and missing
 /// keys fall back to the defaults, so older and newer files both load. Values are
@@ -54,6 +61,7 @@ public struct PlayerSettings: Codable, Equatable, Sendable {
     /// Which voice each of the eight pads plays (see `DrumKit.padVoices`).
     public var padVoices: [Int: DrumVoice]
     public var highwayLayout: HighwayLayout
+    public var strikeLine: StrikeLinePosition
 
     public static let defaultHitWindowMs = 120.0
     public static let defaultEarlyWindowMs = 50.0
@@ -67,7 +75,8 @@ public struct PlayerSettings: Codable, Equatable, Sendable {
         missSoundVolume: Double = PlayerSettings.defaultMissSoundVolume,
         stemVolumes: [String: Double] = [:],
         padVoices: [Int: DrumVoice] = DrumKit.defaultPadVoices,
-        highwayLayout: HighwayLayout = .vertical
+        highwayLayout: HighwayLayout = .vertical,
+        strikeLine: StrikeLinePosition = .edge
     ) {
         // Through the same clamps as later changes (didSet does not run in init).
         let timing = TimingConfiguration(totalSec: hitWindowMs / 1000, frontSec: earlyWindowMs / 1000, offsetMs: timingOffsetMs)
@@ -79,6 +88,7 @@ public struct PlayerSettings: Codable, Equatable, Sendable {
         self.stemVolumes = stemVolumes.mapValues(Self.clampVolume)
         self.padVoices = padVoices
         self.highwayLayout = highwayLayout
+        self.strikeLine = strikeLine
     }
 
     public var kit: DrumKit {
@@ -98,7 +108,7 @@ public struct PlayerSettings: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case timingOffsetMs, hitWindowMs, earlyWindowMs, metronomeVolume, missSoundVolume, stemVolumes, padVoices, highwayLayout
+        case timingOffsetMs, hitWindowMs, earlyWindowMs, metronomeVolume, missSoundVolume, stemVolumes, padVoices, highwayLayout, strikeLine
     }
 
     public init(from decoder: Decoder) throws {
@@ -122,7 +132,8 @@ public struct PlayerSettings: Codable, Equatable, Sendable {
             missSoundVolume: value(Double.self, .missSoundVolume) ?? Self.defaultMissSoundVolume,
             stemVolumes: value([String: Double].self, .stemVolumes) ?? [:],
             padVoices: voices,
-            highwayLayout: value(HighwayLayout.self, .highwayLayout) ?? .vertical
+            highwayLayout: value(HighwayLayout.self, .highwayLayout) ?? .vertical,
+            strikeLine: value(StrikeLinePosition.self, .strikeLine) ?? .edge
         )
     }
 
@@ -139,6 +150,7 @@ public struct PlayerSettings: Codable, Equatable, Sendable {
             forKey: .padVoices
         )
         try container.encode(highwayLayout, forKey: .highwayLayout)
+        try container.encode(strikeLine, forKey: .strikeLine)
     }
 
     /// The settings in `url`, or the defaults.

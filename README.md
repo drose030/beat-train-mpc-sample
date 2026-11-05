@@ -66,11 +66,12 @@ upper row of pads, the lower half to the lower row.
 
 Under **Highway** in the settings the notes can also run from right to left instead,
 with one row per pad. A small map of the pads at the left of each row shows which
-one to hit.
+one to hit. **Strike line** moves the line you hit on away from the edge, a quarter,
+a third or half way in, so you see more of the notes you have just played.
 
 **Settings** (B2 in the song list): timing offset, hit window, metronome, miss
-sound, highway direction, and a volume for each part of the song (drums, bass,
-vocals…).
+sound, highway direction, strike line, and a volume for each part of the song
+(drums, bass, vocals…).
 
 **Pads** (B3 in the song list): hit a pad, then turn the encoder to choose its
 drum. B1 puts all pads back to the defaults.

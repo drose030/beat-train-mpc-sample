@@ -92,8 +92,10 @@ struct PlayerSettingsTests {
         #expect(try JSONDecoder().decode(PlayerSettings.self, from: Data("{}".utf8)).highwayLayout == .vertical)
         let url = tempURL()
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
-        try PlayerSettings(highwayLayout: .horizontal).save(to: url)
+        try PlayerSettings(highwayLayout: .horizontal, strikeLine: .third).save(to: url)
         #expect(PlayerSettings.load(from: url).highwayLayout == .horizontal)
+        #expect(PlayerSettings.load(from: url).strikeLine == .third)
+        #expect(try JSONDecoder().decode(PlayerSettings.self, from: Data("{}".utf8)).strikeLine == .edge)
     }
 
     @Test func defaultsMatchTheOriginalGame() {

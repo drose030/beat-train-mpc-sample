@@ -60,7 +60,7 @@ over a running song they stay silent.
 
 **Settings** (B2 in the song list): timing offset, hit window and its early part
 (the original game's settings), metronome and miss sound volume, the highway
-layout, and a volume per stem. The list scrolls when it is longer than the screen. Turn the encoder to pick a line, push to edit it, turn to change it, push
+layout and its strike line, and a volume per stem. The list scrolls when it is longer than the screen. Turn the encoder to pick a line, push to edit it, turn to change it, push
 or STOP when done; ERASE or B1 puts the line back to its default; STOP or B3 returns
 and saves. The metronome clicks on the song's beats (the chart's beat grid), placed
 to the sample by the audio thread.
@@ -96,6 +96,12 @@ notes fall on get a row. A 4×2 map of the panel at the left of each row shows i
 Struck notes turn white and stay on the row, missed ones fade, and the target box
 of the struck pad flashes green or red. Song, streak and accuracy sit in a line
 above it; hits, misses and best streak are on the results only.
+
+The strike line (settings: STRIKE LINE) sits near the end the notes run to (bottom or
+left, as in the original game), or a quarter, a third or half way along the highway.
+Chart time 0 is at the line on both highways, so the notes keep their speed and
+timing; only how far ahead and back they show changes. Struck notes stay on the
+highway in white on both, so a line further in shows a trail of what was played.
 
 The screen is an SPI panel (25 MHz): a full frame takes about 50 ms to send, longer
 than the panel takes to refresh itself, so it shows part old, part new frame. Sent

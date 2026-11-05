@@ -5,13 +5,11 @@ import MPCHardware
 extension BeatTrainApp {
     static let highwayWidth = 200
     static let laneWidth = 50
-    static let strikeY = 202
     static let highwayBottom = 216
     static let pixelsPerSecond = 125.0
     // The horizontal highway: rows between `rowsTop` and `rowsBottom`, the panel
-    // in miniature left of each row, notes running left onto `strikeX`.
+    // in miniature left of each row, notes running left onto `strikeX(for:)`.
     static let padMapWidth = 32
-    static let strikeX = 74
     static let rowsTop = 32
     static let rowsBottom = 218
     static let maxRowHeight = 32
@@ -190,18 +188,32 @@ extension BeatTrainApp {
         drawSoftKeys(into: &canvas)
     }
 
-    /// Notes come down four columns onto the strike line, the pads below it.
+    /// The y of the vertical highway's strike line: near its bottom, or a quarter,
+    /// a third or half way up. Time 0 is there, the notes to come lie above it and
+    /// those passed below it, at the same speed.
+    static func strikeY(for position: StrikeLinePosition) -> Int {
+        switch position {
+        case .edge: return highwayBottom - 14
+        case .quarter: return highwayBottom - highwayBottom / 4
+        case .third: return highwayBottom - highwayBottom / 3
+        case .middle: return highwayBottom / 2
+        }
+    }
+
+    /// Notes come down four columns onto the strike line, the pads below the
+    /// highway. Struck notes pass the line in white; missed ones fade.
     private func drawVerticalHighway(_ play: Play, time: Double, now: Double, into canvas: inout Canvas) {
         let session = play.session
         let pps = Self.pixelsPerSecond
-        let futureSec = Double(Self.strikeY) / pps
-        let pastSec = Double(Self.highwayBottom - Self.strikeY) / pps
+        let strikeY = Self.strikeY(for: settings.strikeLine)
+        let futureSec = Double(strikeY) / pps
+        let pastSec = Double(Self.highwayBottom - strikeY) / pps
 
         canvas.fillRect(x: 0, y: 0, width: Self.highwayWidth, height: Self.highwayBottom, Theme.highway)
 
         // Beat grid.
         for beat in play.beatTimes where beat > time - pastSec && beat < time + futureSec {
-            let y = Self.strikeY - Int(((beat - time) * pps).rounded())
+            let y = strikeY - Int(((beat - time) * pps).rounded())
             canvas.fillRect(x: 0, y: y, width: Self.highwayWidth, height: 1, Theme.beatLine)
         }
 
@@ -214,7 +226,7 @@ extension BeatTrainApp {
             if lane > 0 {
                 canvas.fillRect(x: x, y: 0, width: 1, height: Self.highwayBottom, Theme.laneLine)
             }
-            canvas.strokeRect(x: x + 4, y: Self.strikeY - 11, width: Self.laneWidth - 8, height: 22, Theme.dim)
+            canvas.strokeRect(x: x + 4, y: strikeY - 11, width: Self.laneWidth - 8, height: 22, Theme.dim)
         }
 
         // Notes, from the first one that can still be on screen.
@@ -227,25 +239,31 @@ extension BeatTrainApp {
         var index = low
         while index < notes.count, notes[index].timeSec < time + futureSec {
             defer { index += 1 }
-            let state = session.state(ofNote: index)
-            guard state != .hit else { continue }
             let target = session.target(ofNote: index)
             var color = session.voice(ofNote: index).color
-            if state == .missed { color = color.mixed(with: Theme.highway, amount: 0.7) }
-            let y = Self.strikeY - Int(((notes[index].timeSec - time) * pps).rounded())
+            switch session.state(ofNote: index) {
+            case .hit: color = Theme.text
+            case .missed: color = color.mixed(with: Theme.highway, amount: 0.7)
+            default: break
+            }
+            let y = strikeY - Int(((notes[index].timeSec - time) * pps).rounded())
             let x = target.lane * Self.laneWidth + 6
             let w = Self.laneWidth - 12
             let ghost = color.mixed(with: Theme.highway, amount: 0.8)
-            // Upper half = the upper panel row, as the pads are laid out.
-            canvas.fillRect(x: x, y: y - 9, width: w, height: 8, target.row == PanelPads.rowOnTop ? color : ghost)
-            canvas.fillRect(x: x, y: y + 1, width: w, height: 8, target.row != PanelPads.rowOnTop ? color : ghost)
+            // Upper half = the upper panel row, as the pads are laid out. Cut off at
+            // the end of the highway, above the pads.
+            for (top, isUpper) in [(y - 9, true), (y + 1, false)] {
+                let height = min(8, Self.highwayBottom - top)
+                guard height > 0 else { continue }
+                canvas.fillRect(x: x, y: top, width: w, height: height, (target.row == PanelPads.rowOnTop) == isUpper ? color : ghost)
+            }
         }
 
         // Strike line and judgement flashes.
-        canvas.fillRect(x: 0, y: Self.strikeY - 1, width: Self.highwayWidth, height: 2, Theme.accent)
+        canvas.fillRect(x: 0, y: strikeY - 1, width: Self.highwayWidth, height: 2, Theme.accent)
         for lane in 0..<4 {
             guard let flash = play.judgeFlash[lane], flash.until > now else { continue }
-            canvas.fillRect(x: lane * Self.laneWidth + 2, y: Self.strikeY - 4, width: Self.laneWidth - 4, height: 8, flash.isHit ? Theme.hit : Theme.miss)
+            canvas.fillRect(x: lane * Self.laneWidth + 2, y: strikeY - 4, width: Self.laneWidth - 4, height: 8, flash.isHit ? Theme.hit : Theme.miss)
         }
 
         // The eight pads under the highway.
@@ -302,21 +320,35 @@ extension BeatTrainApp {
         }
     }
 
+    /// The x of the horizontal highway's strike line: near its left end, or a
+    /// quarter, a third or half way along it. Time 0 is there, the notes to come
+    /// lie right of it and those passed left of it, at the same speed.
+    static func strikeX(for position: StrikeLinePosition, width: Int = 320) -> Int {
+        let length = width - padMapWidth
+        switch position {
+        case .edge: return padMapWidth + 42
+        case .quarter: return padMapWidth + length / 4
+        case .third: return padMapWidth + length / 3
+        case .middle: return padMapWidth + length / 2
+        }
+    }
+
     /// Notes run right to left onto the strike line, one row per pad. Struck notes
     /// stay on the row and pass the line in white; missed ones fade.
     private func drawHorizontalHighway(_ play: Play, time: Double, now: Double, into canvas: inout Canvas) {
         let session = play.session
         let pps = Self.pixelsPerSecond
         let left = Self.padMapWidth, width = canvas.width - left
-        let futureSec = Double(canvas.width - Self.strikeX) / pps
-        let pastSec = Double(Self.strikeX - left) / pps
+        let strikeX = Self.strikeX(for: settings.strikeLine, width: canvas.width)
+        let futureSec = Double(canvas.width - strikeX) / pps
+        let pastSec = Double(strikeX - left) / pps
         let rowHeight = min(Self.maxRowHeight, (Self.rowsBottom - Self.rowsTop) / max(play.rowPads.count, 1))
         let height = rowHeight * play.rowPads.count
         let top = Self.rowsTop + (Self.rowsBottom - Self.rowsTop - height) / 2
 
         canvas.fillRect(x: left, y: top, width: width, height: height, Theme.highway)
         for beat in play.beatTimes where beat > time - pastSec && beat < time + futureSec {
-            let x = Self.strikeX + Int(((beat - time) * pps).rounded())
+            let x = strikeX + Int(((beat - time) * pps).rounded())
             canvas.fillRect(x: x, y: top, width: 1, height: height, Theme.beatLine)
         }
 
@@ -343,7 +375,7 @@ extension BeatTrainApp {
             if hasTag {
                 canvas.drawText(voice.tag, x: 2, y: y + 18, Theme.dim)
             }
-            let box = (x: Self.strikeX - 7, y: y + 3, width: 14, height: rowHeight - 5)
+            let box = (x: strikeX - 7, y: y + 3, width: 14, height: rowHeight - 5)
             if let judge = play.padJudge[pad], judge.until > now {
                 canvas.fillRect(x: box.x, y: box.y, width: box.width, height: box.height, judge.isHit ? Theme.hit : Theme.miss)
             }
@@ -367,13 +399,13 @@ extension BeatTrainApp {
             case .missed: color = color.mixed(with: Theme.highway, amount: 0.7)
             default: break
             }
-            let x = Self.strikeX + Int(((notes[index].timeSec - time) * pps).rounded())
+            let x = strikeX + Int(((notes[index].timeSec - time) * pps).rounded())
             // Clipped at the panel map, which the notes pass under.
             let noteLeft = max(x - 5, left)
             guard x + 5 > noteLeft else { continue }
             canvas.fillRect(x: noteLeft, y: top + row * rowHeight + 5, width: x + 5 - noteLeft, height: rowHeight - 9, color)
         }
-        canvas.fillRect(x: Self.strikeX - 1, y: top, width: 2, height: height, Theme.accent)
+        canvas.fillRect(x: strikeX - 1, y: top, width: 2, height: height, Theme.accent)
     }
 
     /// Above the horizontal highway: the song, streak and accuracy, and the
