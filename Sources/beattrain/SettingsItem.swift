@@ -42,7 +42,8 @@ enum SettingsItem: Equatable {
         switch self {
         case .timingOffset: 2 * TimingConfiguration.offsetRangeMs
         case .hitWindow, .earlyWindow: 200
-        case .metronome, .missSound, .stem, .highway: 1
+        case .metronome, .missSound, .stem: 1
+        case .highway: Double(HighwayLayout.allCases.count - 1)
         case .strikeLine: Double(StrikeLinePosition.allCases.count - 1)
         }
     }
@@ -55,8 +56,10 @@ enum SettingsItem: Equatable {
             TimingConfiguration.minTotalSec * 1000...TimingConfiguration.maxTotalSec * 1000
         case .earlyWindow:
             0...TimingConfiguration.maxFront(forTotal: settings.hitWindowMs / 1000) * 1000
-        case .metronome, .missSound, .stem, .highway:
+        case .metronome, .missSound, .stem:
             0...1
+        case .highway:
+            0...Double(HighwayLayout.allCases.count - 1)
         case .strikeLine:
             0...Double(StrikeLinePosition.allCases.count - 1)
         }
@@ -69,7 +72,7 @@ enum SettingsItem: Equatable {
         case .earlyWindow: settings.earlyWindowMs
         case .metronome: settings.metronomeVolume
         case .missSound: settings.missSoundVolume
-        case .highway: settings.highwayLayout == .horizontal ? 1 : 0
+        case .highway: Double(HighwayLayout.allCases.firstIndex(of: settings.highwayLayout) ?? 0)
         case .strikeLine: Double(StrikeLinePosition.allCases.firstIndex(of: settings.strikeLine) ?? 0)
         case let .stem(name): settings.stemVolume(name)
         }
@@ -84,7 +87,9 @@ enum SettingsItem: Equatable {
         case .earlyWindow: settings.earlyWindowMs = rounded
         case .metronome: settings.metronomeVolume = rounded
         case .missSound: settings.missSoundVolume = rounded
-        case .highway: settings.highwayLayout = rounded >= 1 ? .horizontal : .vertical
+        case .highway:
+            let layouts = HighwayLayout.allCases
+            settings.highwayLayout = layouts[min(max(Int(rounded), 0), layouts.count - 1)]
         case .strikeLine:
             let positions = StrikeLinePosition.allCases
             settings.strikeLine = positions[min(max(Int(rounded), 0), positions.count - 1)]
@@ -101,7 +106,12 @@ enum SettingsItem: Equatable {
         switch self {
         case .timingOffset: return "\(BeatTrainApp.signed(value)) MS"
         case .hitWindow, .earlyWindow: return "\(Int(value.rounded())) MS"
-        case .highway: return settings.highwayLayout == .horizontal ? "HORIZONTAL" : "VERTICAL"
+        case .highway:
+            switch settings.highwayLayout {
+            case .vertical: return "VERTICAL"
+            case .verticalByPad: return "VERTICAL BY PAD"
+            case .horizontal: return "HORIZONTAL"
+            }
         case .strikeLine:
             switch settings.strikeLine {
             case .edge: return settings.highwayLayout == .horizontal ? "LEFT" : "BOTTOM"

@@ -54,9 +54,9 @@ copies only `song.ini`, charts and album art (small, for the lab).
 The rules behind the README's short version.
 
 K1–K3 move their setting by how far they turn (the MPC does not report knob
-positions at start, so a saved value would otherwise jump to the knob). Outside
-a song the bottom line names them, and K2 and K3 sound the level they set;
-over a running song they stay silent.
+positions at start, so a saved value would otherwise jump to the knob). The bar at
+the bottom of every screen names them, while playing too. Outside a song K2 and K3
+sound the level they set; over a running song they stay silent.
 
 **Settings** (B2 in the song list): timing offset, hit window and its early part
 (the original game's settings), metronome and miss sound volume, the highway
@@ -78,7 +78,14 @@ then the results come; STOP shows them at once.
 
 The pads light in their drum colour and flash when struck. The two rows are
 swapped against the original game (snare row at the bottom); the highway draws each
-note's upper half for the upper pad row.
+note's upper half for the upper pad row. Under each lane, and left of each row of
+the horizontal highway, a 4×2 map of the panel shows where its pads sit (both pads
+of a lane on the 4-lane highway).
+
+The vertical-by-pad highway (settings: HIGHWAY) gives each pad the chart's notes fall
+on a column of its own, left to right as the pads sit on the panel (column by column,
+the upper row first): up to 6 lanes of 33 px with the default pads, whole notes
+instead of halves.
 
 **Song speed** (SHIFT+FADER, 50–100 % in 5 % steps): the fader moves the speed by
 how far it travels, not to where it stands, so a fader left anywhere does not make it

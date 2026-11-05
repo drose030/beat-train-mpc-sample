@@ -272,7 +272,7 @@ final class BeatTrainApp {
         case .loading:
             return ControlHints(softKeys: [nil, nil, nil])
         case .playing:
-            return ControlHints(softKeys: ["RESTART", nil, "END"], footer: ["PLAY: PAUSE", "STOP: END"])
+            return ControlHints(softKeys: ["RESTART", nil, "END"])
         case .results:
             return ControlHints(softKeys: ["RETRY", nil, "SONGS"], footer: ["PUSH/PLAY: SONGS"])
         case let .settings(_, editing):

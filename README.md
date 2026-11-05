@@ -64,9 +64,10 @@ hidden behind the loading screen: press B1 (Beat-Train) or B3 (MPC).
 The pads light up in their drum colour. Each note's upper half belongs to the
 upper row of pads, the lower half to the lower row.
 
-Under **Highway** in the settings the notes can also run from right to left instead,
-with one row per pad. A small map of the pads at the left of each row shows which
-one to hit. **Strike line** moves the line you hit on away from the edge, a quarter,
+Under **Highway** in the settings you choose how the notes run: down four lanes as
+above, down one lane per pad (*vertical by pad*), or from right to left with one row
+per pad (*horizontal*). Small maps of the pads under each lane, or left of each row,
+show which pad to hit. **Strike line** moves the line you hit on away from the edge, a quarter,
 a third or half way in, so you see more of the notes you have just played.
 
 **Settings** (B2 in the song list): timing offset, hit window, metronome, miss

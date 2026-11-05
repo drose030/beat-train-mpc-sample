@@ -148,18 +148,19 @@ struct SettingsScreenTests {
         #expect(!editing)
     }
 
-    @Test func highwayLineSwitchesBetweenTheTwoLayouts() {
+    @Test func highwayLineStepsThroughTheLayouts() {
         let app = BeatTrainApp(songs: [], songRoots: [], audio: nil)
         app.handle(.button(.screen2, pressed: true), now: 0)
         app.handle(.encoder(delta: SettingsItem.all.firstIndex(of: .highway)!), now: 0)
         app.handle(.button(.dataPush, pressed: true), now: 0)
-        app.handle(.encoder(delta: 1), now: 0)
-        #expect(app.settings.highwayLayout == .horizontal)
-        #expect(SettingsItem.highway.text(in: app.settings) == "HORIZONTAL")
-        app.handle(.encoder(delta: 1), now: 0)
-        #expect(app.settings.highwayLayout == .horizontal, "stays at the end")
+        var texts = [SettingsItem.highway.text(in: app.settings)]
+        for _ in 0..<3 {
+            app.handle(.encoder(delta: 1), now: 0)
+            texts.append(SettingsItem.highway.text(in: app.settings))
+        }
+        #expect(texts == ["VERTICAL", "VERTICAL BY PAD", "HORIZONTAL", "HORIZONTAL"], "stays at the end")
         app.handle(.encoder(delta: -1), now: 0)
-        #expect(app.settings.highwayLayout == .vertical)
+        #expect(app.settings.highwayLayout == .verticalByPad)
     }
 
     @Test func strikeLineStepsThroughItsPositions() {
@@ -413,7 +414,7 @@ struct SongEndTests {
     @Test func horizontalHighwayJudgesOnTheStruckPadsRow() throws {
         defer { try? FileManager.default.removeItem(at: root) }
         let (app, audio) = try makeApp()
-        app.keeper.set(.highway, to: 1, now: 0)
+        app.keeper.set(.highway, to: 2, now: 0)
         #expect(app.sweep == .rows, "menus go out row by row")
         let start = startSong(app)
         #expect(app.sweep == .columns, "notes running sideways go out in strips")
@@ -450,11 +451,37 @@ struct SongEndTests {
         var canvas = Canvas(width: 320, height: 240)
         app.render(into: &canvas, now: start + 0.5)
         let middle = BeatTrainApp.strikeY(for: .middle)
-        #expect(middle == 108)
+        #expect(middle == 106)
         #expect(canvas.pixel(x: 30, y: middle) == Theme.accent)
         // Half a second on, the struck kick is 62 px below the line, in white (its
         // upper half: kicks are on the upper panel row).
         #expect(canvas.pixel(x: 10, y: middle + 62 - 5) == Theme.text)
+
+        // Under lane 1 one map of the panel, with both its pads: the kick (upper
+        // panel row) and the snare (lower); below it, the bar naming K1-K3.
+        let snare = DrumKit.pad(forLayout: DrumTarget(lane: 0, row: .top))
+        let mapX = (BeatTrainApp.laneWidth - BeatTrainApp.padMapSize.width) / 2, mapY = BeatTrainApp.highwayBottom + 2
+        #expect(canvas.pixel(x: mapX + PanelPads.rows[0].firstIndex(of: kick)! * 6 + 2, y: mapY + 2) == DrumVoice.kick.color)
+        #expect(canvas.pixel(x: mapX + PanelPads.rows[1].firstIndex(of: snare)! * 6 + 2, y: mapY + 6 + 2) == DrumVoice.red.color)
+        #expect(canvas.pixel(x: 3, y: canvas.height - 14) == Theme.accent)
+    }
+
+    @Test func byPadHighwayGivesTheChartsPadsALaneEach() throws {
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (app, _) = try makeApp()
+        app.keeper.set(.highway, to: 1, now: 0)
+        let start = startSong(app)
+        let kick = DrumKit.pad(forLayout: DrumTarget(lane: 0, row: .bottom))
+        app.handle(.padDown(pad: PanelPads.panelPad(forPad: kick), velocity: 100), now: start)
+        var canvas = Canvas(width: 320, height: 240)
+        app.render(into: &canvas, now: start)
+        #expect(app.sweep == .rows)
+        // The kick is the only pad: one lane, the whole highway, judged green.
+        let strikeY = BeatTrainApp.strikeY(for: .edge)
+        #expect(canvas.pixel(x: 5, y: strikeY + 5) == Theme.hit)
+        #expect(canvas.pixel(x: 100, y: strikeY) == Theme.accent)
+        let mapX = (BeatTrainApp.highwayWidth - BeatTrainApp.padMapSize.width) / 2
+        #expect(canvas.pixel(x: mapX + PanelPads.rows[0].firstIndex(of: kick)! * 6 + 2, y: BeatTrainApp.highwayBottom + 4) == Theme.text, "struck: white")
     }
 
     @Test func b1RestartsTheSongFromTheStart() throws {

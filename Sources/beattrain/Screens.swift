@@ -5,7 +5,7 @@ import MPCHardware
 extension BeatTrainApp {
     static let highwayWidth = 200
     static let laneWidth = 50
-    static let highwayBottom = 216
+    static let highwayBottom = 212
     static let pixelsPerSecond = 125.0
     // The horizontal highway: rows between `rowsTop` and `rowsBottom`, the panel
     // in miniature left of each row, notes running left onto `strikeX(for:)`.
@@ -93,9 +93,12 @@ extension BeatTrainApp {
         canvas.fillRect(x: 0, y: line, width: canvas.width, height: 12, Theme.panel)
         canvas.drawText(hints.footer.joined(separator: "  "), x: 4, y: line + 3, Theme.dim)
         canvas.drawText(right, x: canvas.width - Canvas.textWidth(right) - 4, y: line + 3, Theme.dim)
+        drawKnobBar(into: &canvas)
+    }
 
+    /// What K1, K2 and K3 do: a bar at the bottom, mirroring the soft keys.
+    private func drawKnobBar(into canvas: inout Canvas) {
         let width = canvas.width / 3, top = canvas.height - 14
-        // What K1, K2 and K3 do: a bar at the bottom, mirroring the soft keys.
         for (slot, label) in SettingsKeeper.knobs.map(\.item.title).enumerated() {
             let x = slot * width
             canvas.fillRect(x: x + 2, y: top, width: width - 4, height: 14, Theme.panel)
@@ -165,6 +168,10 @@ extension BeatTrainApp {
             drawVerticalHighway(play, time: time, now: now, into: &canvas)
             drawSidebar(play, time: time, into: &canvas)
             centerX = Self.highwayWidth / 2
+        case .verticalByPad:
+            drawVerticalByPadHighway(play, time: time, now: now, into: &canvas)
+            drawSidebar(play, time: time, into: &canvas)
+            centerX = Self.highwayWidth / 2
         case .horizontal:
             drawHorizontalHighway(play, time: time, now: now, into: &canvas)
             drawInfoLine(play, time: time, into: &canvas)
@@ -186,6 +193,7 @@ extension BeatTrainApp {
             canvas.drawText("STOP: RESULTS", x: centerX - Canvas.textWidth("STOP: RESULTS") / 2, y: 102, Theme.dim)
         }
         drawSoftKeys(into: &canvas)
+        drawKnobBar(into: &canvas)
     }
 
     /// The y of the vertical highway's strike line: near its bottom, or a quarter,
@@ -231,12 +239,7 @@ extension BeatTrainApp {
 
         // Notes, from the first one that can still be on screen.
         let notes = session.chart.notes
-        var low = 0, high = notes.count
-        while low < high {
-            let mid = (low + high) / 2
-            if notes[mid].timeSec < time - pastSec { low = mid + 1 } else { high = mid }
-        }
-        var index = low
+        var index = Self.firstNote(in: notes, from: time - pastSec)
         while index < notes.count, notes[index].timeSec < time + futureSec {
             defer { index += 1 }
             let target = session.target(ofNote: index)
@@ -266,14 +269,101 @@ extension BeatTrainApp {
             canvas.fillRect(x: lane * Self.laneWidth + 2, y: strikeY - 4, width: Self.laneWidth - 4, height: 8, flash.isHit ? Theme.hit : Theme.miss)
         }
 
-        // The eight pads under the highway.
-        for pad in 0..<DrumKit.padCount {
+        // Under each lane a map of the panel with its pads (those with a sound).
+        for lane in 0..<4 {
+            let pads = (0..<DrumKit.padCount).filter { DrumKit.layoutTarget(forPad: $0).lane == lane && kit.voice(forPad: $0) != .off }
+            guard !pads.isEmpty else { continue }
+            drawPadMap(showing: pads, play: play, now: now, x: lane * Self.laneWidth + (Self.laneWidth - Self.padMapSize.width) / 2,
+                       y: Self.highwayBottom + 2, into: &canvas)
+        }
+    }
+
+    /// Notes come down one column per pad the chart uses, in the order the pads sit
+    /// on the panel, with a map of the panel under each. Struck notes pass the line in
+    /// white; missed ones fade.
+    private func drawVerticalByPadHighway(_ play: Play, time: Double, now: Double, into canvas: inout Canvas) {
+        let session = play.session
+        let pps = Self.pixelsPerSecond
+        let strikeY = Self.strikeY(for: settings.strikeLine)
+        let futureSec = Double(strikeY) / pps
+        let pastSec = Double(Self.highwayBottom - strikeY) / pps
+        let pads = Self.padLanes(play.rowPads)
+        let laneWidth = Self.highwayWidth / max(pads.count, 1)
+        let left = (Self.highwayWidth - laneWidth * pads.count) / 2
+
+        canvas.fillRect(x: 0, y: 0, width: Self.highwayWidth, height: Self.highwayBottom, Theme.highway)
+        for beat in play.beatTimes where beat > time - pastSec && beat < time + futureSec {
+            canvas.fillRect(x: 0, y: strikeY - Int(((beat - time) * pps).rounded()), width: Self.highwayWidth, height: 1, Theme.beatLine)
+        }
+
+        // Lanes: input flash, separator, target box with the judgement, panel map.
+        for (lane, pad) in pads.enumerated() {
+            let x = left + lane * laneWidth
+            if play.padFlashUntil[pad] > now {
+                canvas.fillRect(x: x, y: 0, width: laneWidth, height: Self.highwayBottom, Theme.highway.mixed(with: kit.voice(forPad: pad).color, amount: 0.22))
+            }
+            if lane > 0 {
+                canvas.fillRect(x: x, y: 0, width: 1, height: Self.highwayBottom, Theme.laneLine)
+            }
+            if let judge = play.padJudge[pad], judge.until > now {
+                canvas.fillRect(x: x + 3, y: strikeY - 9, width: laneWidth - 6, height: 18, judge.isHit ? Theme.hit : Theme.miss)
+            }
+            canvas.strokeRect(x: x + 3, y: strikeY - 9, width: laneWidth - 6, height: 18, Theme.dim)
+            drawPadMap(showing: [pad], play: play, now: now, x: x + (laneWidth - Self.padMapSize.width) / 2, y: Self.highwayBottom + 2, into: &canvas)
+        }
+
+        // Notes, from the first one that can still be on screen, cut off at the end
+        // of the highway.
+        let notes = session.chart.notes
+        var index = Self.firstNote(in: notes, from: time - pastSec)
+        while index < notes.count, notes[index].timeSec < time + futureSec {
+            defer { index += 1 }
+            guard let lane = pads.firstIndex(of: DrumKit.pad(forLayout: session.target(ofNote: index))) else { continue }
+            var color = session.voice(ofNote: index).color
+            switch session.state(ofNote: index) {
+            case .hit: color = Theme.text
+            case .missed: color = color.mixed(with: Theme.highway, amount: 0.7)
+            default: break
+            }
+            let top = strikeY - Int(((notes[index].timeSec - time) * pps).rounded()) - 5
+            let height = min(10, Self.highwayBottom - top)
+            guard height > 0 else { continue }
+            canvas.fillRect(x: left + lane * laneWidth + 5, y: top, width: laneWidth - 10, height: height, color)
+        }
+        canvas.fillRect(x: 0, y: strikeY - 1, width: Self.highwayWidth, height: 2, Theme.accent)
+    }
+
+    /// The lanes of the by-pad highway, left to right as the pads sit on the panel:
+    /// by column, the upper panel row's pad first.
+    static func padLanes(_ pads: [Int]) -> [Int] {
+        func place(_ pad: Int) -> (Int, Int) {
             let target = DrumKit.layoutTarget(forPad: pad)
-            let voice = kit.voice(forPad: pad)
-            let lit = play.padFlashUntil[pad] > now
-            let color = voice == .off ? Theme.panel : (lit ? voice.color : voice.color.mixed(with: Theme.background, amount: 0.7))
-            let y = target.row == PanelPads.rowOnTop ? Self.highwayBottom + 3 : Self.highwayBottom + 13
-            canvas.fillRect(x: target.lane * Self.laneWidth + 6, y: y, width: Self.laneWidth - 12, height: 8, color)
+            return (target.lane, target.row == PanelPads.rowOnTop ? 0 : 1)
+        }
+        return pads.sorted { place($0) < place($1) }
+    }
+
+    /// The index of the first of `notes` (in time order) at or after `time`.
+    private static func firstNote(in notes: [DrumNoteEvent], from time: Double) -> Int {
+        var low = 0, high = notes.count
+        while low < high {
+            let mid = (low + high) / 2
+            if notes[mid].timeSec < time { low = mid + 1 } else { high = mid }
+        }
+        return low
+    }
+
+    /// The size of `drawPadMap`: 4×2 cells of 5 px, 1 px apart.
+    static let padMapSize = (width: 23, height: 11)
+
+    /// The panel's eight pads in miniature, as they sit on the panel, with `pads` in
+    /// their voices' colours (white while struck).
+    private func drawPadMap(showing pads: [Int], play: Play, now: Double, x: Int, y: Int, into canvas: inout Canvas) {
+        for (panelRow, row) in PanelPads.rows.enumerated() {
+            for (column, cell) in row.enumerated() {
+                let color = !pads.contains(cell) ? Theme.panel : (play.padFlashUntil[cell] > now ? Theme.text : kit.voice(forPad: cell).color)
+                canvas.fillRect(x: x + column * 6, y: y + panelRow * 6, width: 5, height: 5, color)
+            }
         }
     }
 
@@ -314,9 +404,6 @@ extension BeatTrainApp {
         }
         if playback.speed < 1 {
             canvas.drawText("SPEED \(Self.percent(playback.speed))", x: x, y: 188, Theme.accent)
-        }
-        for (row, hint) in hints.footer.enumerated() {
-            canvas.drawText(hint, x: x, y: 214 + row * 12, Theme.dim)
         }
     }
 
@@ -363,15 +450,9 @@ extension BeatTrainApp {
             if row > 0 {
                 canvas.fillRect(x: left, y: y, width: width, height: 1, Theme.laneLine)
             }
-            // Which of the panel's eight pads this row is, as they sit on the panel.
+            // Which of the panel's eight pads this row is.
             let hasTag = rowHeight >= 26
-            let mapY = hasTag ? y + 4 : y + (rowHeight - 11) / 2
-            for (panelRow, pads) in PanelPads.rows.enumerated() {
-                for (column, cell) in pads.enumerated() {
-                    let color = cell != pad ? Theme.panel : (lit ? Theme.text : voice.color)
-                    canvas.fillRect(x: 3 + column * 6, y: mapY + panelRow * 6, width: 5, height: 5, color)
-                }
-            }
+            drawPadMap(showing: [pad], play: play, now: now, x: 3, y: hasTag ? y + 4 : y + (rowHeight - Self.padMapSize.height) / 2, into: &canvas)
             if hasTag {
                 canvas.drawText(voice.tag, x: 2, y: y + 18, Theme.dim)
             }
@@ -384,12 +465,7 @@ extension BeatTrainApp {
 
         // Notes, from the first one that can still be on screen.
         let notes = session.chart.notes
-        var low = 0, high = notes.count
-        while low < high {
-            let mid = (low + high) / 2
-            if notes[mid].timeSec < time - pastSec { low = mid + 1 } else { high = mid }
-        }
-        var index = low
+        var index = Self.firstNote(in: notes, from: time - pastSec)
         while index < notes.count, notes[index].timeSec < time + futureSec {
             defer { index += 1 }
             guard let row = play.rowPads.firstIndex(of: DrumKit.pad(forLayout: session.target(ofNote: index))) else { continue }
@@ -408,36 +484,25 @@ extension BeatTrainApp {
         canvas.fillRect(x: strikeX - 1, y: top, width: 2, height: height, Theme.accent)
     }
 
-    /// Above the horizontal highway: the song, streak and accuracy, and the
-    /// song's progress; below it, the controls.
+    /// Above the horizontal highway: the song, then from the right streak and
+    /// accuracy, the speed and a missing audio; below, the song's progress.
     private func drawInfoLine(_ play: Play, time: Double, into canvas: inout Canvas) {
         let score = play.session.score
-        let right = "STREAK \(score.streak)  \(Int((play.session.runningAccuracy * 100).rounded()))%"
-        let titleChars = (canvas.width - Canvas.textWidth(right) - 16) / 6
-        canvas.drawText(fit(play.song.title, titleChars), x: 4, y: 18, Theme.accent)
-        canvas.drawText(right, x: canvas.width - Canvas.textWidth(right) - 4, y: 18, Theme.text)
+        var edge = canvas.width - 4
+        func right(_ text: String, _ color: Color) {
+            edge -= Canvas.textWidth(text)
+            canvas.drawText(text, x: edge, y: 18, color)
+            edge -= 12
+        }
+        right("STREAK \(score.streak)  \(Self.percent(play.session.runningAccuracy))", Theme.text)
+        if playback.speed < 1 { right("SPEED \(Self.percent(playback.speed))", Theme.accent) }
+        if !playback.hasMusic { right("NO AUDIO", Theme.miss) }
+        canvas.drawText(fit(play.song.title, max(0, (edge - 4) / 6)), x: 4, y: 18, Theme.accent)
 
         let last = play.session.chart.notes.last?.timeSec ?? 1
         let progress = min(max(time / max(last, 0.001), 0), 1)
         canvas.fillRect(x: 0, y: 28, width: canvas.width, height: 2, Theme.panel)
         canvas.fillRect(x: 0, y: 28, width: Int(Double(canvas.width) * progress), height: 2, Theme.accent)
-
-        let y = canvas.height - 12
-        canvas.drawText(hints.footer.joined(separator: "  "), x: 4, y: y, Theme.dim)
-        // Right-aligned, from the right: no audio or the offset, then the speed.
-        var edge = canvas.width - 4
-        if !playback.hasMusic {
-            edge -= Canvas.textWidth("NO AUDIO")
-            canvas.drawText("NO AUDIO", x: edge, y: y, Theme.miss)
-        } else if timingOffsetMs != 0 {
-            let offset = "OFFSET \(Self.signed(timingOffsetMs))MS"
-            edge -= Canvas.textWidth(offset)
-            canvas.drawText(offset, x: edge, y: y, Theme.dim)
-        }
-        if playback.speed < 1 {
-            let speed = "SPEED \(Self.percent(playback.speed))"
-            canvas.drawText(speed, x: edge - Canvas.textWidth(speed) - (edge < canvas.width - 4 ? 12 : 0), y: y, Theme.accent)
-        }
     }
 
     /// The pads the horizontal highway shows, top row first: those the chart's notes

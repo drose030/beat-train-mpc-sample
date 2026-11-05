@@ -26,7 +26,7 @@ Top or bottom half of a lane — encodes the 2-pad-per-lane play style.
 How fast the song plays, 50–100 %, for practising (SHIFT+FADER). Slower at the same pitch; chart time is song time, so the notes and the hit window slow down with it. Not saved; distinct from a song's tempo (**TempoMap**).
 
 **Highway layout**:
-Which way the note highway runs on the play screen: vertical (4 **Lanes**, notes come down, each note's halves are the two **Rows**) or horizontal (one row per **Pad** the chart uses, notes run right to left). A **PlayerSettings** value. Distinct from **Row**, which is part of a **DrumTarget**.
+How the note highway runs on the play screen: vertical (4 **Lanes**, notes come down, each note's halves are the two **Rows**), vertical by pad (one column per **Pad** the chart uses, in panel order) or horizontal (one row per **Pad** the chart uses, notes run right to left). A **PlayerSettings** value. Distinct from **Row**, which is part of a **DrumTarget**.
 
 **Strike line**:
 The line on the highway where a note is to be struck: chart time 0, notes to come on one side, passed ones on the other. Sits near the end the notes run to, or a quarter, a third or half way in (a **PlayerSettings** value, for both **Highway layouts**); further in shows more passed notes and less of what comes.
@@ -108,7 +108,7 @@ _Avoid_: "audio" for this (that is the engine underneath).
 The player's settings while the app runs: the one way to change them (settings line, encoder step, knob turn, pad voice), which knob turns which setting (`knobs`, the source of the K1–K3 labels), and saving a moment after the last change through a **SettingsStorage** adapter (`SettingsFile` on the card; in memory in tests).
 
 **ControlHints**:
-What the controls do on the current screen, as the screen shows it: the B1–B3 labels and the footer. Kept next to the input handlers, so a label and its action change together.
+What the controls do on the current screen, as the screen shows it: the B1–B3 labels and the footer (none while playing; the K1–K3 bar is on every screen). Kept next to the input handlers, so a label and its action change together.
 
 **Splash**:
 The start picture (one of the original Beat-Train splash screens) and its rules: on screen for a fixed time, a press ends it only after a minimum, knobs pass under it.

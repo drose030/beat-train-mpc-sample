@@ -46,6 +46,15 @@ struct HorizontalRowsTests {
         #expect(rows == [cymbal, snare, kick].map(DrumKit.pad(forLayout:)))
     }
 
+    @Test func byPadLanesFollowThePanel() {
+        let pads = [DrumTarget(lane: 3, row: .top), DrumTarget(lane: 0, row: .top), DrumTarget(lane: 0, row: .bottom), DrumTarget(lane: 3, row: .bottom)]
+            .map(DrumKit.pad(forLayout:))
+        // Panel column by column, the upper panel row (the kick's) first.
+        let expected = [DrumTarget(lane: 0, row: .bottom), DrumTarget(lane: 0, row: .top), DrumTarget(lane: 3, row: .bottom), DrumTarget(lane: 3, row: .top)]
+            .map(DrumKit.pad(forLayout:))
+        #expect(BeatTrainApp.padLanes(pads) == expected)
+    }
+
     @Test func withoutNotesEveryPadWithAVoice() throws {
         let rows = BeatTrainApp.horizontalRows(for: try session([]), kit: DrumKit())
         #expect(rows.count == (0..<DrumKit.padCount).filter { DrumKit().voice(forPad: $0) != .off }.count)

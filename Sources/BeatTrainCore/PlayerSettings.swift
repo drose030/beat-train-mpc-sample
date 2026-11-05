@@ -12,9 +12,11 @@ import Darwin
 #endif
 
 /// Which way the note highway runs on the play screen.
-public enum HighwayLayout: String, Codable, Sendable {
+public enum HighwayLayout: String, Codable, Sendable, CaseIterable {
     /// Notes come down four columns, one per pair of pads.
     case vertical
+    /// Notes come down one column per pad the chart uses.
+    case verticalByPad
     /// Notes run right to left, one row per pad (as in Melodics).
     case horizontal
 }

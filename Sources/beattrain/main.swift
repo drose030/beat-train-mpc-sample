@@ -115,11 +115,12 @@ if let directory = option("--preview", in: arguments) {
 }
 
 if let directory = option("--demo", in: arguments) {
-    for sub in ["play", "play-horizontal", "pads"] {
+    for sub in HighwayLayout.allCases.map(Demo.playFolder) + ["pads"] {
         try? FileManager.default.createDirectory(atPath: "\(directory)/\(sub)", withIntermediateDirectories: true)
     }
-    Demo.renderPlay(songs: songs, roots: roots, into: directory)
-    Demo.renderPlay(songs: songs, roots: roots, layout: .horizontal, into: directory)
+    for layout in HighwayLayout.allCases {
+        Demo.renderPlay(songs: songs, roots: roots, layout: layout, into: directory)
+    }
     Demo.renderPads(songs: songs, roots: roots, into: directory)
     exit(0)
 }

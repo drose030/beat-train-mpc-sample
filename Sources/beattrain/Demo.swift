@@ -2,8 +2,8 @@ import BeatTrainCore
 import MPCHardware
 
 /// Frames for the README's animations, rendered off-device: a few seconds of play
-/// (`play/frame-NNNN.ppm`, on the horizontal highway `play-horizontal/`) and the pad
-/// setup (`pads/frame-NNNN.ppm`).
+/// (`play/frame-NNNN.ppm`, on the other highways `play-by-pad/` and `play-horizontal/`)
+/// and the pad setup (`pads/frame-NNNN.ppm`).
 enum Demo {
     static let fps = 25.0
 
@@ -13,10 +13,10 @@ enum Demo {
     static func renderPlay(songs: [SongMetadata], roots: [String], layout: HighwayLayout = .vertical, into directory: String, seconds: Double = 8) {
         let audio = AudioEngine(offlineRate: 44100)
         let app = BeatTrainApp(songs: songs, songRoots: roots, audio: audio)
-        let folder = "\(directory)/" + (layout == .vertical ? "play" : "play-horizontal")
+        let folder = "\(directory)/" + Self.playFolder(layout)
         var canvas = Canvas(width: 320, height: 240)
         var now = monotonicSeconds()
-        app.keeper.set(.highway, to: layout == .vertical ? 0 : 1, now: now)
+        app.keeper.set(.highway, to: Double(HighwayLayout.allCases.firstIndex(of: layout) ?? 0), now: now)
         app.handle(.encoder(delta: 1), now: now)
         app.handle(.button(.dataPush, pressed: true), now: now)
         app.handle(.button(.dataPush, pressed: true), now: now)
@@ -52,6 +52,14 @@ enum Demo {
             frame += 1
         }
         log("wrote \(frame) frames to \(folder)")
+    }
+
+    static func playFolder(_ layout: HighwayLayout) -> String {
+        switch layout {
+        case .vertical: "play"
+        case .verticalByPad: "play-by-pad"
+        case .horizontal: "play-horizontal"
+        }
     }
 
     /// The pad setup: pick a few pads and step through their sounds.
