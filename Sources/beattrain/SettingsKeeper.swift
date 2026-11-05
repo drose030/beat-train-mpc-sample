@@ -25,6 +25,27 @@ struct SettingsFile: SettingsStorage {
     }
 }
 
+/// The stems SHIFT+K1–K3 turn together: the song stem, the drums, all the rest.
+enum StemGroup: CaseIterable {
+    case song, drums, others
+
+    var title: String {
+        switch self {
+        case .song: "SONG"
+        case .drums: "DRUMS"
+        case .others: "OTHERS"
+        }
+    }
+
+    var stems: [String] {
+        switch self {
+        case .song: ["song"]
+        case .drums: ["drums"]
+        case .others: SongPlayback.stemNames.filter { $0 != "song" && $0 != "drums" }
+        }
+    }
+}
+
 /// The player's settings while the app runs: the one way to change them (by
 /// settings line, encoder step, knob turn or pad voice), which knob turns which
 /// setting, and saving them a moment after the last change.
@@ -32,6 +53,10 @@ final class SettingsKeeper {
     /// K1–K3 and the setting each turns, in panel order.
     static let knobs: [(control: PanelControl, item: SettingsItem)] = [
         (.k1, .timingOffset), (.k2, .metronome), (.k3, .missSound),
+    ]
+    /// K1–K3 with SHIFT held: the stems each turns.
+    static let mixKnobs: [(control: PanelControl, group: StemGroup)] = [
+        (.k1, .song), (.k2, .drums), (.k3, .others),
     ]
     /// How long after the last change the settings are saved.
     static let saveDelaySec = 2.0
@@ -53,6 +78,8 @@ final class SettingsKeeper {
     private var lastKnob: [PanelControl: UInt8] = [:]
     /// Each knob's value before rounding to the setting's step.
     private var knobAccumulator: [PanelControl: Double] = [:]
+    /// With SHIFT: how far each knob turned that is not yet a whole volume step.
+    private var mixAccumulator: [PanelControl: Double] = [:]
 
     /// `storage` nil: the defaults, never saved.
     init(storage: SettingsStorage?) {
@@ -95,6 +122,36 @@ final class SettingsKeeper {
         knobAccumulator[control] = accumulated
         set(item, to: accumulated, now: now)
         return item
+    }
+
+    /// A knob reported `value` with SHIFT held: the stems of its group move together
+    /// by how far it turned (a whole turn is 0–100 %), each keeping its distance to
+    /// the others. Only the stems in `present` (the song's; nil: all) move. Returns
+    /// the group; nil for a control that is no knob, a knob's first report, and a
+    /// group with none of its stems present.
+    @discardableResult
+    func turnMix(_ control: PanelControl, to value: UInt8, present: Set<String>?, now: Double) -> StemGroup? {
+        guard let group = Self.mixKnobs.first(where: { $0.control == control })?.group else { return nil }
+        defer { lastKnob[control] = value }
+        guard let last = lastKnob[control] else { return nil }
+        let stems = group.stems.filter { present?.contains($0) ?? true }
+        guard !stems.isEmpty else { return nil }
+        let step = SettingsItem.stem("").step
+        let moved = (mixAccumulator[control] ?? 0) + Double(Int(value) - Int(last)) / 127
+        let steps = (moved / step).rounded(.towardZero)
+        mixAccumulator[control] = moved - steps * step
+        guard steps != 0 else { return group }
+        var settings = current
+        for name in stems {
+            settings.stemVolumes[name] = ((settings.stemVolume(name) + steps * step) / step).rounded() * step
+        }
+        commit(settings, item: .stem(stems[0]), now: now)
+        return group
+    }
+
+    /// The level SHIFT+knob shows for a group: its loudest stem in `present`.
+    func level(of group: StemGroup, present: Set<String>?) -> Double {
+        group.stems.filter { present?.contains($0) ?? true }.map(current.stemVolume).max() ?? 1
     }
 
     func setVoice(_ voice: DrumVoice, forPad pad: Int, now: Double) {

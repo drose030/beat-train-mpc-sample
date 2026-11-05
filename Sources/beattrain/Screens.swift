@@ -99,7 +99,8 @@ extension BeatTrainApp {
     /// What K1, K2 and K3 do: a bar at the bottom, mirroring the soft keys.
     private func drawKnobBar(into canvas: inout Canvas) {
         let width = canvas.width / 3, top = canvas.height - 14
-        for (slot, label) in SettingsKeeper.knobs.map(\.item.title).enumerated() {
+        for (slot, label) in knobLabels.enumerated() {
+            guard let label else { continue }
             let x = slot * width
             canvas.fillRect(x: x + 2, y: top, width: width - 4, height: 14, Theme.panel)
             canvas.fillRect(x: x + 2, y: top, width: width - 4, height: 1, Theme.accent)

@@ -177,6 +177,12 @@ final class BeatTrainApp {
         case let .control(.fader, value):
             moveFader(to: value, now: now)
             return
+        case let .control(control, value) where SettingsKeeper.knobs.contains(where: { $0.control == control }) && shiftHeld:
+            let present = playback.loadedStems
+            if let group = keeper.turnMix(control, to: value, present: present, now: now) {
+                message = ("\(group.title) \(Self.percent(keeper.level(of: group, present: present)))", now + 1.5)
+            }
+            return
         case let .control(control, value) where SettingsKeeper.knobs.contains(where: { $0.control == control }):
             if let item = keeper.turn(control, to: value, now: now) {
                 message = ("\(item.title) \(item.text(in: settings))", now + 1.5)
@@ -288,6 +294,16 @@ final class BeatTrainApp {
                                 footer: editing ? ["TURN: CHANGE", "PUSH: DONE"] : ["TURN: SELECT", "PUSH: EDIT", "STOP: BACK"])
         case .padSetup:
             return ControlHints(softKeys: ["RESET", nil, "DONE"], footer: ["HIT: SELECT PAD", "TURN: SOUND", "STOP: DONE"])
+        }
+    }
+
+    /// What K1–K3 do now, for the bar at the bottom: their settings, or with SHIFT
+    /// held the stem groups, nil for a group the loaded song has no stems of.
+    var knobLabels: [String?] {
+        guard shiftHeld else { return SettingsKeeper.knobs.map(\.item.title) }
+        let present = playback.loadedStems
+        return SettingsKeeper.mixKnobs.map { knob in
+            knob.group.stems.contains { present?.contains($0) ?? true } ? knob.group.title : nil
         }
     }
 

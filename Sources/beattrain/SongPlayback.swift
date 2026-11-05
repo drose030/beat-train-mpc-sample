@@ -125,6 +125,11 @@ final class SongPlayback {
         resumesAt = nil
     }
 
+    /// The stems of the loaded song; nil without a song.
+    var loadedStems: Set<String>? {
+        song == nil ? nil : Set(stemIndices.keys)
+    }
+
     /// The loaded song has stems playing in the engine.
     var hasMusic: Bool {
         !stemIndices.isEmpty

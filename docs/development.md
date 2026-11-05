@@ -55,7 +55,11 @@ The rules behind the README's short version.
 
 K1–K3 move their setting by how far they turn (the MPC does not report knob
 positions at start, so a saved value would otherwise jump to the knob). The bar at
-the bottom of every screen names them, while playing too. Outside a song K2 and K3
+the bottom of every screen names them, while playing too. With SHIFT held they turn
+stem volumes instead: K1 the `song` stem, K2 `drums`, K3 all the others together,
+each keeping its distance to the rest (a whole turn is 0–100 %). The bar then shows
+SONG / DRUMS / OTHERS, without the ones the loaded song has no stems of, and those
+knobs do nothing; without a song all three show. Outside a song K2 and K3
 sound the level they set; over a running song they stay silent.
 
 **Settings** (B2 in the song list): timing offset, hit window and its early part

@@ -526,6 +526,26 @@ struct SongEndTests {
         #expect(app.playback.resumesAt == nil)
     }
 
+    @Test func shiftShowsTheStemGroupsTheSongHas() throws {
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (app, audio) = try makeApp()   // a song stem only
+        #expect(app.knobLabels == ["TIMING OFFSET", "METRONOME", "MISS SOUND"])
+        app.handle(.button(.shift, pressed: true), now: 0)
+        #expect(app.knobLabels == ["SONG", "DRUMS", "OTHERS"], "no song loaded: all")
+        _ = startSong(app)
+        #expect(app.knobLabels == ["SONG", nil, nil])
+        app.handle(.control(.k1, value: 127), now: 1)
+        app.handle(.control(.k1, value: 63), now: 1)                 // half a turn down
+        #expect(app.settings.stemVolume("song") == 0.5)
+        #expect(app.message?.text == "SONG 50%")
+        #expect(app.settings.timingOffsetMs == 0, "not the offset")
+        _ = audio
+        app.handle(.button(.shift, pressed: false), now: 1)
+        app.handle(.control(.k1, value: 74), now: 1)
+        #expect(app.settings.timingOffsetMs != 0, "without SHIFT K1 is the offset again, from where it stands")
+        #expect(app.settings.stemVolume("song") == 0.5)
+    }
+
     @Test func b1RestartsTheSongFromTheStart() throws {
         defer { try? FileManager.default.removeItem(at: root) }
         let (app, audio) = try makeApp()

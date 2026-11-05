@@ -60,6 +60,7 @@ hidden behind the loading screen: press B1 (Beat-Train) or B3 (MPC).
 | K3 | miss sound volume (all the way down = off) |
 | MAIN VOLUME | volume |
 | SHIFT + FADER | song speed for practising, 50–100 %, at the same pitch |
+| SHIFT + K1 K2 K3 | volume of the song, the drums and all other parts; the bar shows only those the song has |
 
 The pads light up in their drum colour. Each note's upper half belongs to the
 upper row of pads, the lower half to the lower row.

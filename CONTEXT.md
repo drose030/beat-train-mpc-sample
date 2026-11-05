@@ -22,6 +22,9 @@ One of the 4 vertical columns of the note highway. Distinct from the 6 canonical
 **Row**:
 Top or bottom half of a lane — encodes the 2-pad-per-lane play style.
 
+**Stem group**:
+The stems SHIFT+K1–K3 turn together: the `song` stem, the `drums`, and all the others. Changes the per-stem volumes in **PlayerSettings**, each stem keeping its distance to the rest of its group.
+
 **Song speed**:
 How fast the song plays, 50–100 %, for practising (SHIFT+FADER). Slower at the same pitch; chart time is song time, so the notes and the hit window slow down with it. Not saved; distinct from a song's tempo (**TempoMap**).
 
