@@ -23,7 +23,8 @@ out, or power off, and the MPC is exactly as before.
 - An **Akai MPC Sample with firmware 1.3.0.x**. To check: without a card, press
   SHIFT + PAD 8 (MIDI Config); the version is at the top right.
 - A **microSD card formatted as exFAT**, just for Beat-Train. A card holds only
-  one start-up program, so not the card you use for SampQOL OS.
+  one start-up program, so not the card you use for SampQOL OS (unless you use a
+  boot menu, see [Together with other programs](#together-with-other-programs)).
 - **Songs** in Clone Hero format (see [Songs](#songs)).
 
 ## Install
@@ -62,14 +63,14 @@ hidden behind the loading screen: press B1 (Beat-Train) or B3 (MPC).
 | SHIFT + FADER | song speed for practising, 50–100 %, at the same pitch |
 | SHIFT + K1 K2 K3 | volume of the song, the drums and all other parts; the bar shows only those the song has |
 
-The pads light up in their drum colour. Each note's upper half belongs to the
-upper row of pads, the lower half to the lower row.
+The pads light up in their drum colour. On the four-lane highway each note's upper
+half belongs to the upper row of pads, the lower half to the lower row.
 
 Under **Highway** in the settings you choose how the notes run: down four lanes as
 above, down one lane per pad (*vertical by pad*), or from right to left with one row
 per pad (*horizontal*). Small maps of the pads under each lane, or left of each row,
-show which pad to hit. **Strike line** moves the line you hit on away from the edge, a quarter,
-a third or half way in, so you see more of the notes you have just played.
+show which pad to hit. **Strike line** moves the line you hit on away from the edge,
+a quarter, a third or half way in, so you see more of the notes you have just played.
 
 **Settings** (B2 in the song list): timing offset, hit window, metronome, miss
 sound, highway direction, strike line, and a volume for each part of the song
@@ -95,8 +96,8 @@ Rock Band packages (`_rb3con`, `.mogg`) and Opus audio don't work. Convert those
 a Clone Hero folder first, for example with Onyx.
 
 No chart for a song you like? [Trackyard](https://github.com/drose030/trackyard)
-makes one from the audio (MP3, WAV, OGG or FLAC) on your computer, lets you fix it in an editor and
-saves it as a song folder for the card.
+makes one from the audio (MP3, WAV, OGG or FLAC) on your computer, lets you fix it
+in an editor and saves it as a song folder for the card.
 
 ## If something goes wrong
 

@@ -12,8 +12,8 @@ panel protocol come from that version). Domain terms are in
 | Path | What |
 |---|---|
 | `Sources/BeatTrainCore` | Game logic, copied from the original Beat-Train code and since diverged (see ADR-0001; FoundationEssentials on Linux, Foundation on Apple platforms): parsers, TempoMap, DrumKit, hit judging, GameSession, SongLibrary, PlayerSettings |
-| `Sources/MPCHardware` | Display (DRM/KMS), control surface (rawmidi), audio engine, canvas and 5×7 font |
-| `Sources/CMPCHardware` | C: DRM and rawmidi ioctls, the audio engine (ALSA PCM without alsa-lib, stem mixer), decoders: [minimp3](https://github.com/lieff/minimp3) (CC0, in `minimp3/`), [stb_vorbis](https://github.com/nothings/stb) (public domain or MIT, in `stb_vorbis/`), WAV in `decoder.c` |
+| `Sources/MPCHardware` | Display (DRM/KMS, frames sent as changed strips), control surface (rawmidi), audio engine, canvas and 5×7 font |
+| `Sources/CMPCHardware` | C: DRM and rawmidi ioctls, the audio engine (ALSA PCM without alsa-lib, stem mixer, time stretch), decoders: [minimp3](https://github.com/lieff/minimp3) (CC0, in `minimp3/`), [stb_vorbis](https://github.com/nothings/stb) (public domain or MIT, in `stb_vorbis/`), WAV in `decoder.c` |
 | `Sources/beattrain` | The game: screens and input (`BeatTrainApp`, `Screens`), song playback and clock (`SongPlayback`), settings and knobs (`SettingsKeeper`), panel pad numbering and lights (`PanelPads`), start picture, quit and power-off (`Lifecycle`) — see `CONTEXT.md` |
 | `Sources/beattrain-hwtest` | Hardware test program |
 | `packaging/autorun` | The SD-card autorun scripts |
@@ -53,82 +53,96 @@ copies only `song.ini`, charts and album art (small, for the lab).
 
 The rules behind the README's short version.
 
+### Controls
+
 K1–K3 move their setting by how far they turn (the MPC does not report knob
 positions at start, so a saved value would otherwise jump to the knob). The bar at
-the bottom of every screen names them, while playing too. With SHIFT held they turn
-stem volumes instead: K1 the `song` stem, K2 `drums`, K3 all the others together,
-each keeping its distance to the rest (a whole turn is 0–100 %). The bar then shows
-SONG / DRUMS / OTHERS, without the ones the loaded song has no stems of, and those
-knobs do nothing; without a song all three show. Outside a song K2 and K3
+the bottom of every screen names them, while playing too. Outside a song K2 and K3
 sound the level they set; over a running song they stay silent.
 
+With SHIFT held, K1–K3 turn stem volumes instead: K1 the `song` stem, K2 `drums`, K3
+all the others together, each keeping its distance to the rest (a whole turn is
+0–100 %). The bar then shows SONG / DRUMS / OTHERS, without the ones the loaded song
+has no stems of, and those knobs do nothing; without a song all three show.
+
 **Settings** (B2 in the song list): timing offset, hit window and its early part
-(the original game's settings), metronome and miss sound volume, the highway
-layout and its strike line, and a volume per stem. The list scrolls when it is longer than the screen. Turn the encoder to pick a line, push to edit it, turn to change it, push
-or STOP when done; ERASE or B1 puts the line back to its default; STOP or B3 returns
-and saves. B2 opens them over a running song too: the song pauses, and leaving them
-goes back to it after a count-in of 3 s (PLAY goes on at once), with a changed hit
-window judging the rest of the song. The metronome clicks on the song's beats (the chart's beat grid), placed
-to the sample by the audio thread.
+(the original game's settings), metronome and miss sound volume, the highway layout
+and its strike line, and a volume per stem. The list scrolls when it is longer than
+the screen. Turn the encoder to pick a line, push to edit it, turn to change it,
+push or STOP when done; ERASE or B1 puts the line back to its default; STOP or B3
+returns and saves. B2 opens them over a running song too: the song pauses, and
+leaving them goes back to it after a count-in of 3 s (PLAY goes on at once), with a
+changed hit window judging the rest of the song.
 
 **Pad setup** (B3 in the song list): hit one of pads 1–8 to select it, turn the
 encoder to choose its sound (kick, snare, hi-hat, tom, cymbal, floor tom, off),
-ERASE or B1 goes back to the defaults, STOP or B3 returns and saves. As in the original
-game, a sound's notes fall in the lane of the pad that plays it; a sound on two
-pads plays on both, its notes fall over the lower-numbered one. A hit counts
-only for notes of its own pad row: kick (pad 5) and snare (pad 1) share lane 1
-but not their notes (the original game judges by lane alone).
+ERASE or B1 goes back to the defaults, STOP or B3 returns and saves. As in the
+original game, a sound's notes fall in the lane of the pad that plays it; a sound on
+two pads plays on both, its notes fall over the lower-numbered one. A hit counts
+only for notes of its own pad row: kick (pad 5) and snare (pad 1) share lane 1 but
+not their notes (the original game judges by lane alone).
 
-After the last note the music plays on to its end ("SONG END" on the highway),
-then the results come; STOP shows them at once.
+Hit window and pad assignment are the original defaults (120 ms, 50 ms early). All
+settings are saved in `BeatTrain/settings.json` on the card: when leaving the
+settings or pad setup, 2 s after the last change, and on every way out.
 
-The pads light in their drum colour and flash when struck. The two rows are
-swapped against the original game (snare row at the bottom); the highway draws each
-note's upper half for the upper pad row. Under each lane, and left of each row of
-the horizontal highway, a 4×2 map of the panel shows where its pads sit (both pads
-of a lane on the 4-lane highway).
+### Timing
 
-The vertical-by-pad highway (settings: HIGHWAY) gives each pad the chart's notes fall
-on a column of its own, left to right as the pads sit on the panel (column by column,
-the upper row first): up to 6 lanes of 33 px with the default pads, whole notes
-instead of halves.
+The game clock is the audio actually heard (the device's buffer delay is taken
+out), also for songs without stems, so the timing offset starts at 0; turn K1 if
+hits feel early or late. The metronome clicks on the song's beats (the chart's beat
+grid), placed to the sample by the audio thread. After the last note the music
+plays on to its end ("SONG END" on the highway), then the results come; STOP shows
+them at once.
 
 **Song speed** (SHIFT+FADER, 50–100 % in 5 % steps): the fader moves the speed by
-how far it travels, not to where it stands, so a fader left anywhere does not make it
-jump, and alone it does nothing. The audio engine stretches the mixed stems in time at
-the same pitch (WSOLA: overlapping 23 ms segments, each moved up to 4 ms to where it
-best continues the last); at 100 % the output is the song sample for sample. The
-engine's clock counts song seconds, so the notes, the metronome and the hit window
-run in song time; the timing offset makes up for real-time delays and is scaled down
-with the speed. The speed stays for the next songs until the app ends and shows on
-the play screen and the results.
+how far it travels, not to where it stands, so a fader left anywhere does not make
+it jump, and alone it does nothing. The audio engine stretches the mixed stems in
+time at the same pitch (WSOLA: overlapping 23 ms segments, each moved up to 4 ms to
+where it best continues the last); at 100 % the output is the song sample for
+sample. The engine's clock counts song seconds, so the notes, the metronome and the
+hit window run in song time; the timing offset makes up for real-time delays and is
+scaled down with the speed. The speed stays for the next songs until the app ends
+and shows on the play screen and the results.
 
-The horizontal highway (settings: HIGHWAY) runs the notes right to left with one row
-per pad, cymbals at the top and the kick at the bottom; only the pads the chart's
-notes fall on get a row. A 4×2 map of the panel at the left of each row shows its pad.
-Struck notes turn white and stay on the row, missed ones fade, and the target box
-of the struck pad flashes green or red. Song, streak and accuracy sit in a line
-above it; hits, misses and best streak are on the results only.
+### Highways
+
+The pads light in their drum colour and flash when struck. The two rows are swapped
+against the original game (snare row at the bottom). Settings → HIGHWAY offers
+three layouts:
+
+- **Vertical** (the default): four lanes, one per pad column; each note's upper half
+  is for the upper pad row. Under each lane a 4×2 map of the panel shows both its
+  pads.
+- **Vertical by pad**: a column of its own for each pad the chart's notes fall on,
+  left to right as the pads sit on the panel (column by column, the upper row
+  first): up to 6 lanes of 33 px with the default pads, whole notes instead of
+  halves, a panel map under each.
+- **Horizontal**: notes run right to left with one row per pad, cymbals at the top
+  and the kick at the bottom; only the pads the chart's notes fall on get a row. A
+  panel map at the left of each row shows its pad. Song, streak and accuracy (and
+  the speed) sit in a line above it; hits, misses and best streak are on the
+  results only.
+
+On all three, struck notes turn white and stay on the highway, missed ones fade,
+and the target of the struck pad flashes green or red.
 
 The strike line (settings: STRIKE LINE) sits near the end the notes run to (bottom or
-left, as in the original game), or a quarter, a third or half way along the highway.
-Chart time 0 is at the line on both highways, so the notes keep their speed and
-timing; only how far ahead and back they show changes. Struck notes stay on the
-highway in white on both, so a line further in shows a trail of what was played.
+left, as in the original game), or a quarter, a third or half way along the
+highway. Chart time 0 is at the line, so the notes keep their speed and timing;
+only how far ahead and back they show changes, and a line further in shows a trail
+of what was played.
+
+### Display
 
 The screen is an SPI panel (25 MHz): a full frame takes about 50 ms to send, longer
 than the panel takes to refresh itself, so it shows part old, part new frame. Sent
 row by row, the line between them is horizontal and cuts notes that run sideways in
 two. So only what changed goes out, in strips: bands top to bottom for the vertical
-highway and the menus (`Display.Sweep.rows`), strips left to right for the horizontal
-highway (`.columns`). Both highways run at about 45–60 frames per second on the
-device. During a song the log notes the frame rate every 10 s. Hit window and pad assignment are the
-original defaults (120 ms, 50 ms early). All settings are saved in
-`BeatTrain/settings.json` on the card: when leaving the settings or pad setup,
-2 s after the last change, and on every way out. The game clock is the
-audio actually heard (the device's buffer delay is taken out), also for songs
-without stems, so the timing offset starts at 0; turn K1 if hits feel early or
-late.
+highways and the menus (`Display.Sweep.rows`), strips left to right for the
+horizontal highway (`.columns`). All highways run at about 45–60 frames per second
+on the device. During a song the log notes, every 10 s, the frame rate and the
+audio's underruns and mixing time per period.
 
 ## Test in the lab
 
@@ -180,7 +194,8 @@ named in several formats is taken as `.mp3`, then `.ogg`, then `.wav`. WAV:
 8/16/24/32-bit PCM and 32/64-bit float, also as WAVE_FORMAT_EXTENSIBLE; past
 two channels only the first two play. The whole file stays in RAM.
 In the lab, a 6-stem 48 kHz song: MP3 ~2 % CPU and 55 MB RAM, Ogg Vorbis
-~2.4 % of one core and 117 MB RAM (the Ogg files are twice the size).
+~2.4 % of one core and 117 MB RAM (the Ogg files are twice the size). On the
+device, mixing a period (11.6 ms) takes about 0.2 ms, also at half speed.
 
 ## Sources
 

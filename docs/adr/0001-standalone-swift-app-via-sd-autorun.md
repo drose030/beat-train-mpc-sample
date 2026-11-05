@@ -23,7 +23,8 @@ glibc or libraries. Only the platform layer (screen, input, audio) is new.
 ## Consequences
 
 - Tied to firmware 1.3.0.x until verified on others (runner salt, panel protocol).
-- One autorun package per card: Beat-Train and SampQOL OS need separate cards.
+- One autorun package per card: Beat-Train and SampQOL OS need separate cards. A
+  boot menu such as mpc-boot-thingy can hold several (not tested with Beat-Train yet).
 - Builds for the device need the swift.org toolchain (Docker container); Xcode's
   compiler cannot use the Static Linux SDK.
 

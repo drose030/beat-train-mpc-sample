@@ -17,28 +17,16 @@ _Avoid_: "hit" (that's the player's input), "event" (too generic).
 Where a note lands on the kit — a **Lane** (0–3) plus a **Row** (top/bottom). The thing the player must strike.
 
 **Lane**:
-One of the 4 vertical columns of the note highway. Distinct from the 6 canonical drum colours.
+One of the 4 columns a **DrumTarget** sits in, as on the four-lane highway (a pad column on the panel). Distinct from the 6 canonical drum colours, and from the columns of the by-pad highway (one per **Pad**).
 
 **Row**:
 Top or bottom half of a lane — encodes the 2-pad-per-lane play style.
-
-**Stem group**:
-The stems SHIFT+K1–K3 turn together: the `song` stem, the `drums`, and all the others. Changes the per-stem volumes in **PlayerSettings**, each stem keeping its distance to the rest of its group.
-
-**Song speed**:
-How fast the song plays, 50–100 %, for practising (SHIFT+FADER). Slower at the same pitch; chart time is song time, so the notes and the hit window slow down with it. Not saved; distinct from a song's tempo (**TempoMap**).
-
-**Highway layout**:
-How the note highway runs on the play screen: vertical (4 **Lanes**, notes come down, each note's halves are the two **Rows**), vertical by pad (one column per **Pad** the chart uses, in panel order) or horizontal (one row per **Pad** the chart uses, notes run right to left). A **PlayerSettings** value. Distinct from **Row**, which is part of a **DrumTarget**.
-
-**Strike line**:
-The line on the highway where a note is to be struck: chart time 0, notes to come on one side, passed ones on the other. Sits near the end the notes run to, or a quarter, a third or half way in (a **PlayerSettings** value, for both **Highway layouts**); further in shows more passed notes and less of what comes.
 
 **Difficulty**:
 Easy / Medium / Hard / Expert. In MIDI files difficulties live at different note ranges (offset by `midiBaseNote`); in `.chart` files at different `[*Drums]` sections.
 
 **TempoMap**:
-The deep module that owns tick↔seconds conversion for a chart. Built from `ppq` plus an ordered list of `(tick, bpm)` tempo changes; answers `seconds(forTick:)` and `beatTimes()`. The single source of truth that replaces the three former copies of tempo arithmetic.
+The deep module that owns tick↔seconds conversion for a chart. Built from `ppq` plus an ordered list of `(tick, bpm)` tempo changes; answers `seconds(forTick:)` and `beatTimes()`. The single source of truth for tempo arithmetic.
 _Avoid_: "tempo timeline", "tempo segments" (those are its internals).
 
 **DrumTargetMap**:
@@ -53,7 +41,7 @@ Turns raw file bytes into a **DrumChart**. Two adapters — the MIDI parser and 
 ### Kit & input domain
 
 **DrumVoice**:
-The drum a pad represents — `kick`, `red`, `yellow`, `blue`, `orange`, `green`, or `off` (unassigned). The 6-colour standard plus kick. (Renamed from the former `DrumInputRole`.)
+The drum a pad represents — `kick`, `red`, `yellow`, `blue`, `orange`, `green`, or `off` (unassigned). The 6-colour standard plus kick.
 _Avoid_: "role", "colour" (colour doesn't cover kick/off).
 
 **Pad**:
@@ -104,11 +92,11 @@ Akai's `MPC Sample` program, run by `ac50.service`.
 ### MPC app (`Sources/beattrain`)
 
 **SongPlayback**:
-The music of the song being played and its clock: the stems in the audio engine, the count-in, pause and restart, metronome clicks and the miss feedback (drum mute, miss cue). The one owner of "what time is it in the chart" — the engine position once the count-in is over (stems or not), a timer without an engine; the chart delay and timing offset apply either way.
+The music of the song being played and its clock: the stems in the audio engine, the count-in, pause and restart (and the 3-2-1 back from the settings), the **Song speed**, metronome clicks and the miss feedback (drum mute, miss cue). The one owner of "what time is it in the chart" — the engine position once the count-in is over (stems or not), a timer without an engine; the chart delay and timing offset apply either way.
 _Avoid_: "audio" for this (that is the engine underneath).
 
 **SettingsKeeper**:
-The player's settings while the app runs: the one way to change them (settings line, encoder step, knob turn, pad voice), which knob turns which setting (`knobs`, the source of the K1–K3 labels), and saving a moment after the last change through a **SettingsStorage** adapter (`SettingsFile` on the card; in memory in tests).
+The player's settings while the app runs: the one way to change them (settings line, encoder step, knob turn, pad voice), which knob turns which setting (`knobs`, the source of the K1–K3 labels) and which **Stem group** with SHIFT held (`mixKnobs`), and saving a moment after the last change through a **SettingsStorage** adapter (`SettingsFile` on the card; in memory in tests).
 
 **ControlHints**:
 What the controls do on the current screen, as the screen shows it: the B1–B3 labels and the footer (none while playing; the K1–K3 bar is on every screen). Kept next to the input handlers, so a label and its action change together.
@@ -122,6 +110,18 @@ Where things are when Beat-Train starts: the song folders (`--songs`, `$BEATTRAI
 **Lifecycle**:
 Running, asking to shut down, quitting to the stock app, or powering off. Every way out goes through `quit(powerOff:)`, which stops the song and saves the settings; the exit code (10 = power off) is what `session.sh` reads.
 
+**Highway layout**:
+How the note highway runs on the play screen: vertical (4 **Lanes**, notes come down, each note's halves are the two **Rows**), vertical by pad (one column per **Pad** the chart uses, in panel order) or horizontal (one row per **Pad** the chart uses, notes run right to left). A **PlayerSettings** value. Distinct from **Row**, which is part of a **DrumTarget**.
+
+**Strike line**:
+The line on the highway where a note is to be struck: chart time 0, notes to come on one side, passed ones on the other. Sits near the end the notes run to, or a quarter, a third or half way in (a **PlayerSettings** value, for every **Highway layout**); further in shows more passed notes and less of what comes.
+
+**Song speed**:
+How fast the song plays, 50–100 %, for practising (SHIFT+FADER). Slower at the same pitch; chart time is song time, so the notes and the hit window slow down with it. Not saved; distinct from a song's tempo (**TempoMap**).
+
+**Stem group**:
+The stems SHIFT+K1–K3 turn together: the `song` stem, the `drums`, and all the others. Changes the per-stem volumes in **PlayerSettings**, each stem keeping its distance to the rest of its group.
+
 ## Relationships
 
 - A **DrumChart** has one **TempoMap** and many **Notes**
@@ -133,7 +133,6 @@ Running, asking to shut down, quitting to the stock app, or powering off. Every 
 ## Flagged ambiguities
 
 - A chart with **zero** tempo events is unplayable (no tick→seconds basis) — the parser must surface this as an error, not silently assume 120 BPM. A chart whose first tempo event simply isn't at tick 0 is fine: the leading segment is backfilled with the first known BPM.
-- The Note→**Pad** mapping the player sets in pad setup was formerly ignored during gameplay (gameplay used a static default). Resolved: gameplay and setup share one Note→**Pad** mapping via **DrumKit**.
 
 ## Example dialogue
 
