@@ -119,7 +119,8 @@ if let directory = option("--demo", in: arguments) {
         try? FileManager.default.createDirectory(atPath: "\(directory)/\(sub)", withIntermediateDirectories: true)
     }
     for layout in HighwayLayout.allCases {
-        Demo.renderPlay(songs: songs, roots: roots, layout: layout, into: directory)
+        // The horizontal one with its line half way, to show the trail of struck notes.
+        Demo.renderPlay(songs: songs, roots: roots, layout: layout, strikeLine: layout == .horizontal ? .middle : .edge, into: directory)
     }
     Demo.renderPads(songs: songs, roots: roots, into: directory)
     exit(0)

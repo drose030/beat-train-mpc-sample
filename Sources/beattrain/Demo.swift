@@ -10,13 +10,15 @@ enum Demo {
     /// The second song on Expert with its stems in an offline engine (so the clock
     /// runs as on the device), from a few seconds after its first note: each note
     /// struck on time, every ninth one missed.
-    static func renderPlay(songs: [SongMetadata], roots: [String], layout: HighwayLayout = .vertical, into directory: String, seconds: Double = 8) {
+    static func renderPlay(songs: [SongMetadata], roots: [String], layout: HighwayLayout = .vertical, strikeLine: StrikeLinePosition = .edge,
+                           into directory: String, seconds: Double = 8) {
         let audio = AudioEngine(offlineRate: 44100)
         let app = BeatTrainApp(songs: songs, songRoots: roots, audio: audio)
         let folder = "\(directory)/" + Self.playFolder(layout)
         var canvas = Canvas(width: 320, height: 240)
         var now = monotonicSeconds()
         app.keeper.set(.highway, to: Double(HighwayLayout.allCases.firstIndex(of: layout) ?? 0), now: now)
+        app.keeper.set(.strikeLine, to: Double(StrikeLinePosition.allCases.firstIndex(of: strikeLine) ?? 0), now: now)
         app.handle(.encoder(delta: 1), now: now)
         app.handle(.button(.dataPush, pressed: true), now: now)
         app.handle(.button(.dataPush, pressed: true), now: now)
