@@ -48,7 +48,7 @@ extension BeatTrainApp {
             drawResults(song: song, difficulty: difficulty, session: session, into: &canvas)
         case let .padSetup(selected, _):
             drawPadSetup(selected: selected, into: &canvas)
-        case let .settings(index, editing):
+        case let .settings(index, editing, _):
             drawSettings(index: index, editing: editing, into: &canvas)
         }
     }
@@ -183,7 +183,11 @@ extension BeatTrainApp {
             let count = "\(Int((-time).rounded(.up)))"
             canvas.drawText(count, x: centerX - Canvas.textWidth(count, scale: 5) / 2, y: 70, scale: 5, Theme.text)
         }
-        if playback.isPaused {
+        if let resumesAt = playback.resumesAt {
+            // Back from the settings: 3, 2, 1, then the song goes on.
+            let count = "\(max(1, Int((resumesAt - now).rounded(.up))))"
+            canvas.drawText(count, x: centerX - Canvas.textWidth(count, scale: 5) / 2, y: 70, scale: 5, Theme.text)
+        } else if playback.isPaused {
             canvas.fillRect(x: centerX - 60, y: 80, width: 120, height: 28, Theme.panel)
             canvas.drawText("PAUSED", x: centerX - Canvas.textWidth("PAUSED", scale: 2) / 2, y: 87, scale: 2, Theme.text)
         } else if play.session.isFinished(at: time) {

@@ -40,7 +40,8 @@ enum Screen {
     /// Which voice each pad plays; `selected` is the Beat-Train pad being set.
     case padSetup(selected: Int, flashUntil: Double)
     /// `SettingsItem.all`, `index` selected; `editing`: the encoder changes its value.
-    case settings(index: Int, editing: Bool)
+    /// `paused`: the song paused under it, which DONE goes back to.
+    case settings(index: Int, editing: Bool, paused: Play? = nil)
 }
 
 /// What the controls do on a screen: B1–B3 (nil: unused) and the footer items.
@@ -214,31 +215,38 @@ final class BeatTrainApp {
             }
         case let .padSetup(selected, flashUntil):
             handlePadSetup(event, selected: selected, flashUntil: flashUntil, now: now)
-        case let .settings(index, editing):
-            handleSettings(event, index: index, editing: editing, now: now)
+        case let .settings(index, editing, paused):
+            handleSettings(event, index: index, editing: editing, paused: paused, now: now)
         }
     }
 
     // MARK: - Settings
 
-    private func handleSettings(_ event: ControlEvent, index: Int, editing: Bool, now: Double) {
+    private func handleSettings(_ event: ControlEvent, index: Int, editing: Bool, paused: Play?, now: Double) {
         let item = SettingsItem.all[index]
         switch event {
         case let .encoder(delta):
             if editing {
                 keeper.step(item, by: delta, now: now)
             } else {
-                screen = .settings(index: min(max(index + delta, 0), SettingsItem.all.count - 1), editing: false)
+                screen = .settings(index: min(max(index + delta, 0), SettingsItem.all.count - 1), editing: false, paused: paused)
             }
         case .button(.dataPush, pressed: true):
-            screen = .settings(index: index, editing: !editing)
+            screen = .settings(index: index, editing: !editing, paused: paused)
         case .button(.erase, pressed: true), .button(.screen1, pressed: true):
             keeper.reset(item, now: now)
         case .button(.stop, pressed: true) where editing:
-            screen = .settings(index: index, editing: false)
+            screen = .settings(index: index, editing: false, paused: paused)
         case .button(.stop, pressed: true), .button(.screen3, pressed: true):
             keeper.saveNow()
-            screen = .library
+            if var play = paused {
+                // Back to the song with the hit window as now set, after a count-in.
+                play.session.timing = timing
+                screen = .playing(play)
+                playback.resumeAfterCountIn(now: now)
+            } else {
+                screen = .library
+            }
         default:
             break
         }
@@ -272,10 +280,10 @@ final class BeatTrainApp {
         case .loading:
             return ControlHints(softKeys: [nil, nil, nil])
         case .playing:
-            return ControlHints(softKeys: ["RESTART", nil, "END"])
+            return ControlHints(softKeys: ["RESTART", "SETTINGS", "END"])
         case .results:
             return ControlHints(softKeys: ["RETRY", nil, "SONGS"], footer: ["PUSH/PLAY: SONGS"])
-        case let .settings(_, editing):
+        case let .settings(_, editing, _):
             return ControlHints(softKeys: ["DEFAULT", nil, "DONE"],
                                 footer: editing ? ["TURN: CHANGE", "PUSH: DONE"] : ["TURN: SELECT", "PUSH: EDIT", "STOP: BACK"])
         case .padSetup:
@@ -404,6 +412,9 @@ final class BeatTrainApp {
         case .button(.screen1, pressed: true):
             play = newPlay(song: play.song, difficulty: play.difficulty, chart: play.session.chart)
             playback.begin(now: now)
+        case .button(.screen2, pressed: true):
+            playback.pause(now: now)
+            screen = .settings(index: 0, editing: false, paused: play)
         case .button(.stop, pressed: true), .button(.screen3, pressed: true):
             finish(play, now: now)
         default:
@@ -435,8 +446,9 @@ final class BeatTrainApp {
             }
             return
         }
-        guard case var .playing(play) = screen, playback.isRunning else { return }
-        playback.tick(now: now)
+        guard case var .playing(play) = screen else { return }
+        playback.tick(now: now)  // also ends a count-in back from the settings
+        guard playback.isRunning else { return }
         let time = playback.chartTime(now: now)
         apply(play.session.advance(to: time), to: &play, now: now)
         // After the last note the music plays on to its end.

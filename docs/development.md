@@ -62,7 +62,9 @@ sound the level they set; over a running song they stay silent.
 (the original game's settings), metronome and miss sound volume, the highway
 layout and its strike line, and a volume per stem. The list scrolls when it is longer than the screen. Turn the encoder to pick a line, push to edit it, turn to change it, push
 or STOP when done; ERASE or B1 puts the line back to its default; STOP or B3 returns
-and saves. The metronome clicks on the song's beats (the chart's beat grid), placed
+and saves. B2 opens them over a running song too: the song pauses, and leaving them
+goes back to it after a count-in of 3 s (PLAY goes on at once), with a changed hit
+window judging the rest of the song. The metronome clicks on the song's beats (the chart's beat grid), placed
 to the sample by the audio thread.
 
 **Pad setup** (B3 in the song list): hit one of pads 1–8 to select it, turn the

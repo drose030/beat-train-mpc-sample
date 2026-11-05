@@ -31,6 +31,8 @@ final class SongPlayback {
     static let mutedDrumsGain: Float = 0.2
     /// How far ahead metronome clicks are handed to the audio engine.
     static let clickLookaheadSec = 0.3
+    /// The count-in before the song goes on after the settings: 3, 2, 1.
+    static let resumeCountInSec = 3.0
     /// The song speeds there are, for practising: slower at the same pitch.
     static let speedRange = 0.5...1.0
     static let speedStep = 0.05
@@ -70,6 +72,8 @@ final class SongPlayback {
     /// Monotonic time at which the count-in ends and the music starts.
     private(set) var startsAt = 0.0
     private(set) var pausedAt: Double?
+    /// Counting in to go on after a pause: when the song goes on.
+    private(set) var resumesAt: Double?
 
     /// `missSound`: the bytes of an MP3, Ogg Vorbis or WAV file.
     init(audio: AudioEngine?, missSound: [UInt8]? = nil) {
@@ -118,6 +122,7 @@ final class SongPlayback {
         drumsMuted = false
         begun = false
         pausedAt = nil
+        resumesAt = nil
     }
 
     /// The loaded song has stems playing in the engine.
@@ -135,6 +140,7 @@ final class SongPlayback {
         timer = nil
         nextBeat = 0
         pausedAt = nil
+        resumesAt = nil
         startsAt = now + Self.leadInSec
     }
 
@@ -152,10 +158,19 @@ final class SongPlayback {
 
     func resume(now: Double) {
         guard let pausedAt else { return }
+        resumesAt = nil
         if !musicStarted { startsAt += now - pausedAt }
         timer?.at += now - pausedAt
         self.pausedAt = nil
         if musicStarted { audio?.play() }
+    }
+
+    /// Goes on after a count-in of `resumeCountInSec`, paused until then; at once
+    /// while the song's own count-in still runs.
+    func resumeAfterCountIn(now: Double) {
+        guard pausedAt != nil else { return }
+        guard musicStarted else { return resume(now: now) }
+        resumesAt = now + Self.resumeCountInSec
     }
 
     var isPaused: Bool {
@@ -206,6 +221,7 @@ final class SongPlayback {
     /// Starts the music when the count-in is over and hands the engine the next
     /// metronome clicks.
     func tick(now: Double) {
+        if let resumesAt, now >= resumesAt { resume(now: resumesAt) }
         guard isRunning else { return }
         if !musicStarted, now >= startsAt {
             audio?.play()

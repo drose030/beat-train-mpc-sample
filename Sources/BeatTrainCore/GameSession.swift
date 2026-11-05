@@ -12,7 +12,8 @@ import Foundation
 public struct GameSession: Sendable {
     public let chart: DrumChart
     public let kit: DrumKit
-    public let timing: TimingConfiguration
+    /// May change mid-song, when the player changes the hit window in a pause.
+    public var timing: TimingConfiguration
     public private(set) var score = ScoreState()
     private var noteStates: [Int: NoteJudgmentState]
 

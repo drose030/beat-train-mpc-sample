@@ -140,7 +140,7 @@ struct SettingsScreenTests {
         #expect(app.settings.hitWindowMs == 120)
         app.handle(.button(.dataPush, pressed: true), now: 0)        // done editing
         app.handle(.encoder(delta: 100), now: 0)                     // to the last line
-        guard case let .settings(index, editing) = app.screen else {
+        guard case let .settings(index, editing, _) = app.screen else {
             Issue.record("not on the settings screen")
             return
         }
@@ -197,7 +197,7 @@ struct SettingsScreenTests {
         app.handle(.encoder(delta: -4), now: 0)
         #expect(app.settings.stemVolume("vocals") == 0.8)
         app.handle(.button(.stop, pressed: true), now: 0.1)
-        guard case .settings(_, editing: false) = app.screen else {
+        guard case .settings(_, editing: false, _) = app.screen else {
             Issue.record("STOP should only end editing")
             return
         }
@@ -482,6 +482,48 @@ struct SongEndTests {
         #expect(canvas.pixel(x: 100, y: strikeY) == Theme.accent)
         let mapX = (BeatTrainApp.highwayWidth - BeatTrainApp.padMapSize.width) / 2
         #expect(canvas.pixel(x: mapX + PanelPads.rows[0].firstIndex(of: kick)! * 6 + 2, y: BeatTrainApp.highwayBottom + 4) == Theme.text, "struck: white")
+    }
+
+    @Test func settingsFromTheSongPauseItAndGoOnAfterACountIn() throws {
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (app, audio) = try makeApp()
+        let start = startSong(app)
+        _ = audio.render(frames: 4410)
+        #expect(app.hints.softKeys == ["RESTART", "SETTINGS", "END"])
+        app.handle(.button(.screen2, pressed: true), now: start + 0.1)
+        guard case .settings(_, _, paused: .some) = app.screen else {
+            Issue.record("B2 opens the settings over the song")
+            return
+        }
+        #expect(app.playback.isPaused)
+        app.handle(.encoder(delta: 1), now: start + 1)                // HIT WINDOW
+        app.handle(.button(.dataPush, pressed: true), now: start + 1)
+        app.handle(.encoder(delta: 6), now: start + 1)                // 150 ms
+        app.handle(.button(.dataPush, pressed: true), now: start + 1)
+        app.handle(.button(.screen3, pressed: true), now: start + 5)  // DONE
+        guard case .playing = app.screen else {
+            Issue.record("DONE goes back to the song")
+            return
+        }
+        #expect(play(app)?.session.timing.hitWindowTotalSec == 0.15, "the new hit window judges the rest of the song")
+        let position = app.playback.chartTime(now: start + 5)
+        app.tick(now: start + 7.9)
+        #expect(app.playback.isPaused, "3, 2, 1")
+        #expect(app.playback.chartTime(now: start + 7.9) == position)
+        app.tick(now: start + 8)
+        #expect(!app.playback.isPaused, "and on")
+    }
+
+    @Test func playDuringTheCountInGoesOnAtOnce() throws {
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (app, _) = try makeApp()
+        let start = startSong(app)
+        app.handle(.button(.screen2, pressed: true), now: start)
+        app.handle(.button(.stop, pressed: true), now: start + 1)
+        #expect(app.playback.resumesAt == start + 1 + SongPlayback.resumeCountInSec)
+        app.handle(.button(.play, pressed: true), now: start + 2)
+        #expect(!app.playback.isPaused)
+        #expect(app.playback.resumesAt == nil)
     }
 
     @Test func b1RestartsTheSongFromTheStart() throws {

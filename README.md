@@ -72,7 +72,8 @@ a third or half way in, so you see more of the notes you have just played.
 
 **Settings** (B2 in the song list): timing offset, hit window, metronome, miss
 sound, highway direction, strike line, and a volume for each part of the song
-(drums, bass, vocals…).
+(drums, bass, vocals…). B2 opens them during a song too: the song pauses, and DONE
+takes you back after a 3-2-1.
 
 **Pads** (B3 in the song list): hit a pad, then turn the encoder to choose its
 drum. B1 puts all pads back to the defaults.
