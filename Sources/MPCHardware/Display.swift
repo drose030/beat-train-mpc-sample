@@ -46,6 +46,21 @@ public final class Display {
     /// per-update overhead stays small.
     public static let stripSize: UInt32 = 16
 
+    /// What `present` sends with `old` on screen to show `new`: the changed part of
+    /// each strip, in sending order, as (x, y, width, height).
+    public static func changedStrips(from old: Canvas, to new: Canvas, sweep: Sweep) -> [(x: Int, y: Int, width: Int, height: Int)] {
+        precondition(old.width == new.width && old.height == new.height, "frames of one size")
+        let length = sweep == .columns ? new.width : new.height
+        var rects = [cmpc_rect](repeating: cmpc_rect(), count: (length + Int(stripSize) - 1) / Int(stripSize))
+        let count = old.pixels.withUnsafeBufferPointer { old in
+            new.pixels.withUnsafeBufferPointer { now in
+                cmpc_changed_strips(old.baseAddress, now.baseAddress, UInt32(new.width), UInt32(new.height),
+                                    stripSize, sweep == .columns ? 1 : 0, &rects, rects.count)
+            }
+        }
+        return rects.prefix(count).map { (Int($0.x0), Int($0.y0), Int($0.x1 - $0.x0), Int($0.y1 - $0.y0)) }
+    }
+
     /// Shows the canvas. Blocks until the frame is on screen (vsync-paced).
     public func present(_ canvas: Canvas, sweep: Sweep = .rows) throws {
         precondition(canvas.width == width && canvas.height == height, "canvas size must match the display")

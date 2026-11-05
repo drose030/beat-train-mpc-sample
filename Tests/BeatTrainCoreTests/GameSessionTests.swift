@@ -19,7 +19,7 @@ struct GameSessionTests {
         let feedback = session.strike(pad: 0, at: 1.02)
         #expect(session.state(ofNote: 0) == .hit)
         #expect(session.score.hits == 1)
-        #expect(feedback == [.flashLane(lane: 0, isHit: true), .setDrumsMuted(false)])
+        #expect(feedback == [.flashTarget(DrumTarget(lane: 0, row: .bottom), isHit: true), .setDrumsMuted(false)])
     }
 
     @Test func strikeWithoutANoteIsAnOverhit() throws {
@@ -53,7 +53,7 @@ struct GameSessionTests {
         #expect(session.state(ofNote: 1) == .missed)
         #expect(session.score.misses == 1)
         #expect(session.score.streak == 0)
-        #expect(feedback.first == .flashLane(lane: 0, isHit: false))
+        #expect(feedback.first == .flashTarget(DrumTarget(lane: 0, row: .top), isHit: false))
         #expect(session.accuracy == 0.5)
     }
 
@@ -69,11 +69,5 @@ struct GameSessionTests {
         let session = try makeSession()
         #expect(!session.isFinished(at: 2.5))
         #expect(session.isFinished(at: 4.0))
-    }
-
-    @Test func chartTimeAppliesDelayAndOffsetAndIsNeverNegative() {
-        let offset = TimingConfiguration(totalSec: 0.12, frontSec: 0.05, offsetMs: 70)
-        #expect(abs(GameSession.chartTime(audioTime: 2.0, chartDelayMs: 100, timing: offset) - 1.83) < 1e-9)
-        #expect(GameSession.chartTime(audioTime: 0.05, chartDelayMs: 100, timing: offset) == 0)
     }
 }

@@ -7,7 +7,9 @@ import Foundation
 /// A single feedback action triggered by gameplay — the bridge between the pure
 /// judging logic and the side-effecting view/audio layer.
 public enum GameplayFeedback: Equatable, Sendable {
-    case flashLane(lane: Int, isHit: Bool)
+    /// A judgement to show on the highway, at the slot of the note (or of the
+    /// struck pad, for an overhit).
+    case flashTarget(DrumTarget, isHit: Bool)
     case setDrumsMuted(Bool)
     case playMissSFX
 }
@@ -16,17 +18,17 @@ public enum GameplayFeedback: Equatable, Sendable {
 /// that should follow. The gameplay-audio/visual *policy* — "on hit, unmute the
 /// drums; on miss, mute them and play the miss cue" — lives here in one pure place.
 enum GameplayFeedbackDirector {
-    static func feedback(for judgement: HitJudgement, lane: Int) -> [GameplayFeedback] {
+    static func feedback(for judgement: HitJudgement, target: DrumTarget) -> [GameplayFeedback] {
         switch judgement {
         case .hit:
-            return [.flashLane(lane: lane, isHit: true), .setDrumsMuted(false)]
+            return [.flashTarget(target, isHit: true), .setDrumsMuted(false)]
         case .overhit:
-            return [.flashLane(lane: lane, isHit: false), .setDrumsMuted(true), .playMissSFX]
+            return [.flashTarget(target, isHit: false), .setDrumsMuted(true), .playMissSFX]
         }
     }
 
-    static func feedbackForAutoMisses(lanes: [Int]) -> [GameplayFeedback] {
-        guard !lanes.isEmpty else { return [] }
-        return lanes.map { .flashLane(lane: $0, isHit: false) } + [.setDrumsMuted(true), .playMissSFX]
+    static func feedbackForAutoMisses(targets: [DrumTarget]) -> [GameplayFeedback] {
+        guard !targets.isEmpty else { return [] }
+        return targets.map { .flashTarget($0, isHit: false) } + [.setDrumsMuted(true), .playMissSFX]
     }
 }

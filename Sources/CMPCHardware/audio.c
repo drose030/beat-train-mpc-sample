@@ -1,7 +1,10 @@
 // ALSA PCM playback with raw ioctls (the uapi structs from <sound/asound.h> are
-// declared here, as in rawmidi.c) plus a stem mixer over decoder.c.
+// declared here, as in rawmidi.c) plus a stem mixer over decoder.c, slowed down
+// by stretch.c and timed by heard_clock.c.
 
 #include "cmpc_audio.h"
+#include "cmpc_heard_clock.h"
+#include "cmpc_stretch.h"
 #include "decoder.h"
 
 #include <errno.h>
@@ -197,33 +200,6 @@ typedef struct {
     float gain;
 } effect_t;
 
-// Slower playback at the same pitch (WSOLA). The stems are mixed at their own
-// speed into `in`; the output is built from overlapping Hann-windowed segments of
-// it, one every STRETCH_HOP output frames, taken STRETCH_HOP * speed song frames
-// apart. Each segment may move by up to STRETCH_SEEK frames to where it best
-// continues the previous one, so the waveform stays smooth. At speed 1 the
-// segments follow each other and the output is the input, sample for sample.
-#define STRETCH_LEN 1024
-#define STRETCH_HOP (STRETCH_LEN / 2)
-#define STRETCH_SEEK 192
-#define STRETCH_IN 4096   // song frames kept for the search
-
-typedef struct {
-    float in[STRETCH_IN * 2];  // mixed song frames [in_start, in_start + in_len)
-    uint64_t in_start;
-    size_t in_len;
-    double next;          // nominal song frame of the next segment
-    uint64_t cont;        // the song frame that continues the previous segment
-    float acc[STRETCH_LEN * 2];  // overlap-add of the segments
-    float out[STRETCH_HOP * 2];  // the hop being played
-    double out_song[STRETCH_HOP];  // the nominal song frame of each of its frames
-    size_t out_pos;       // STRETCH_HOP: the next hop is to be made
-    int fresh;            // no segment yet
-} stretch_t;
-
-static float hann[STRETCH_LEN];
-
-#define CLOCK_POINTS 64
 
 struct cmpc_audio {
     int fd;
@@ -244,16 +220,11 @@ struct cmpc_audio {
     int scheduled_count;
 
     double speed;         // song frames per output frame, 0.5-1
-    stretch_t stretch;
+    cmpc_stretch *stretch;  // reads the stems through `mix_stems`
 
-    // Clock: frames written to the device, the song frame after the last frame
-    // mixed, and which song frame went out at which device frame.
+    // Frames written to the device, and which song frame is heard.
     uint64_t written;
-    double song_out;
-    struct { uint64_t device; double song; } points[CLOCK_POINTS];
-    int point_head, point_count;
-    double heard_song;    // last measured song frame being heard
-    double heard_at;      // monotonic time of that measurement
+    cmpc_heard_clock *clock;
 
     // Since the last `cmpc_audio_take_stats`: device underruns, and how long
     // mixing a period took.
@@ -307,130 +278,6 @@ static void stem_mix(stem_t *s, float *out, size_t frames) {
         s->pos += s->step;
         if (s->pos >= (double)s->frames) s->eof = 1;
     }
-}
-
-// ---------------------------------------------------------------- time stretch
-
-static void stretch_reset(stretch_t *t) {
-    memset(t, 0, sizeof(*t));
-    t->out_pos = STRETCH_HOP;
-    t->fresh = 1;
-    if (hann[1] == 0) {
-        // Periodic, so that two halves overlapping by STRETCH_HOP add up to 1.
-        for (int i = 0; i < STRETCH_LEN; i++) hann[i] = (float)(0.5 - 0.5 * cos(2 * M_PI * i / STRETCH_LEN));
-    }
-}
-
-// Mixes the stems on until song frame `end` is in the input, first dropping the
-// frames before `keep`.
-static void stretch_fill(cmpc_audio *a, uint64_t keep, uint64_t end) {
-    stretch_t *t = &a->stretch;
-    if (keep > t->in_start) {
-        size_t drop = (size_t)(keep - t->in_start);
-        if (drop > t->in_len) drop = t->in_len;
-        memmove(t->in, t->in + drop * 2, (t->in_len - drop) * 2 * sizeof(float));
-        t->in_start += drop;
-        t->in_len -= drop;
-    }
-    while (t->in_start + t->in_len < end && t->in_len < STRETCH_IN) {
-        size_t n = (size_t)(end - (t->in_start + t->in_len));
-        if (n > STRETCH_IN - t->in_len) n = STRETCH_IN - t->in_len;
-        float *dst = t->in + t->in_len * 2;
-        memset(dst, 0, n * 2 * sizeof(float));
-        for (int s = 0; s < a->stem_count; s++) stem_mix(a->stems[s], dst, n);
-        t->in_len += n;
-    }
-}
-
-// How well a segment starting at song frame `s` continues `ref` (the mono sum of
-// the natural continuation, every second frame), reading every `every`-th value:
-// normalised cross-correlation.
-static double stretch_match(const stretch_t *t, uint64_t s, const float *ref, double ref_energy, size_t every) {
-    const float *x = t->in + (s - t->in_start) * 2;
-    float dot = 0, energy = 0;
-    for (size_t i = 0; i < STRETCH_HOP / 2; i += every) {
-        float v = x[i * 4] + x[i * 4 + 1];
-        dot += v * ref[i];
-        energy += v * v;
-    }
-    return energy > 1e-12f ? dot / sqrt((double)energy * ref_energy) : 0;
-}
-
-// The segment start in [lo, hi] whose first half best matches the natural
-// continuation of the previous segment: first every fourth start on a quarter of
-// the frames, then the starts around the best on all of them. The middle (the
-// nominal start) in silence.
-static uint64_t stretch_seek(const stretch_t *t, uint64_t lo, uint64_t hi) {
-    float ref[STRETCH_HOP / 2];
-    const float *c = t->in + (t->cont - t->in_start) * 2;
-    double ref_energy = 0;
-    for (size_t i = 0; i < STRETCH_HOP / 2; i++) {
-        ref[i] = c[i * 4] + c[i * 4 + 1];
-        ref_energy += (double)ref[i] * ref[i];
-    }
-    uint64_t best = (lo + hi) / 2;
-    if (ref_energy < 1e-9) return best;
-    double best_score = -2;
-    for (uint64_t s = lo; s <= hi; s += 4) {
-        double score = stretch_match(t, s, ref, ref_energy, 2);
-        if (score > best_score) {
-            best_score = score;
-            best = s;
-        }
-    }
-    uint64_t coarse = best;
-    best_score = -2;
-    for (uint64_t s = coarse > lo + 3 ? coarse - 3 : lo; s <= coarse + 3 && s <= hi; s++) {
-        double score = stretch_match(t, s, ref, ref_energy, 1);
-        if (score > best_score) {
-            best_score = score;
-            best = s;
-        }
-    }
-    return best;
-}
-
-// Makes the next STRETCH_HOP output frames.
-static void stretch_hop(cmpc_audio *a) {
-    stretch_t *t = &a->stretch;
-    uint64_t start;
-    if (a->speed >= 1.0 || t->fresh) {
-        // Segments one after the other: the input as it is, and the nominal
-        // position back on it.
-        start = t->cont;
-        t->next = (double)start;
-        // Keep what a slower next segment may search back to.
-        stretch_fill(a, start > STRETCH_SEEK ? start - STRETCH_SEEK : 0, start + STRETCH_LEN);
-    } else {
-        uint64_t target = (uint64_t)(t->next + 0.5);
-        uint64_t lo = target > STRETCH_SEEK ? target - STRETCH_SEEK : 0;
-        uint64_t hi = target + STRETCH_SEEK;
-        // Never before what is still in the input (nothing is mixed twice).
-        if (lo < t->in_start) lo = t->in_start;
-        if (hi < lo) hi = lo;
-        stretch_fill(a, lo < t->cont ? lo : t->cont, hi + STRETCH_LEN);
-        start = stretch_seek(t, lo, hi);
-    }
-    const float *x = t->in + (start - t->in_start) * 2;
-    if (t->fresh) {
-        // The second half of a segment before the first: the song starts at full level.
-        for (size_t i = 0; i < STRETCH_HOP; i++) {
-            t->acc[i * 2] = x[i * 2] * hann[STRETCH_HOP + i];
-            t->acc[i * 2 + 1] = x[i * 2 + 1] * hann[STRETCH_HOP + i];
-        }
-        t->fresh = 0;
-    }
-    for (size_t i = 0; i < STRETCH_LEN; i++) {
-        t->acc[i * 2] += x[i * 2] * hann[i];
-        t->acc[i * 2 + 1] += x[i * 2 + 1] * hann[i];
-    }
-    memcpy(t->out, t->acc, STRETCH_HOP * 2 * sizeof(float));
-    memmove(t->acc, t->acc + STRETCH_HOP * 2, STRETCH_HOP * 2 * sizeof(float));
-    memset(t->acc + STRETCH_HOP * 2, 0, STRETCH_HOP * 2 * sizeof(float));
-    for (size_t i = 0; i < STRETCH_HOP; i++) t->out_song[i] = t->next + i * a->speed;
-    t->next += STRETCH_HOP * a->speed;
-    t->cont = start + STRETCH_HOP;
-    t->out_pos = 0;
 }
 
 static void stem_free(stem_t *s) {
@@ -513,49 +360,38 @@ static void write_period(cmpc_audio *a, const float *mix, void *dev) {
     }
 }
 
-// Notes that song frame `song` goes out at device frame `device`.
-static void clock_point(cmpc_audio *a, uint64_t device, double song) {
-    int i = (a->point_head + a->point_count) % CLOCK_POINTS;
-    if (a->point_count < CLOCK_POINTS) {
-        a->point_count++;
-    } else {
-        a->point_head = (a->point_head + 1) % CLOCK_POINTS;
-    }
-    a->points[i].device = device;
-    a->points[i].song = song;
+// The stretch's source: the stems, each at its own rate, into `out` (zeroed).
+static void mix_stems(void *context, float *out, size_t frames) {
+    cmpc_audio *a = context;
+    for (int s = 0; s < a->stem_count; s++) stem_mix(a->stems[s], out, frames);
 }
 
-static void clock_reset(cmpc_audio *a) {
-    a->song_out = 0;
-    a->point_head = a->point_count = 0;
-    a->heard_song = 0;
-    a->heard_at = 0;
+// Back to the song's start: nothing mixed or heard.
+static void song_reset(cmpc_audio *a) {
+    cmpc_stretch_reset(a->stretch);
+    cmpc_heard_clock_reset(a->clock);
 }
 
 // Mixes one block of song stems and the effects into `mix` (stereo, zeroed here),
-// in pieces of at most one stretch hop. Called with the lock held.
+// in pieces of PIECE frames at most, with a note of the song frame at each. Called
+// with the lock held.
+#define PIECE 512
+
 static void mix_locked(cmpc_audio *a, float *mix, size_t frames) {
     memset(mix, 0, frames * 2 * sizeof(float));
-    double song[STRETCH_HOP];
+    double song[PIECE];
     for (size_t done = 0; done < frames;) {
         size_t n = frames - done;
-        if (n > STRETCH_HOP) n = STRETCH_HOP;
+        if (n > PIECE) n = PIECE;
         float *m = mix + done * 2;
-        clock_point(a, a->written + done, a->song_out);
+        cmpc_heard_clock_note(a->clock, a->written + done, cmpc_stretch_position(a->stretch));
         if (a->playing) {
-            stretch_t *t = &a->stretch;
-            for (size_t f = 0; f < n; f++) {
-                if (t->out_pos == STRETCH_HOP) stretch_hop(a);
-                m[f * 2] = t->out[t->out_pos * 2];
-                m[f * 2 + 1] = t->out[t->out_pos * 2 + 1];
-                song[f] = t->out_song[t->out_pos];
-                t->out_pos++;
-            }
-            a->song_out = t->out_pos < STRETCH_HOP ? t->out_song[t->out_pos] : t->next;
+            cmpc_stretch_render(a->stretch, a->speed, m, song, n);
+            double song_out = cmpc_stretch_position(a->stretch);
             // Start the scheduled effects that fall into this piece, at their frame.
             for (int i = 0; i < a->scheduled_count;) {
                 double at = (double)a->scheduled[i].song_frame;
-                if (at < a->song_out) {
+                if (at < song_out) {
                     size_t f = 0;
                     while (f + 1 < n && song[f] < at) f++;
                     effect_t *e = &a->effects[a->scheduled[i].slot];
@@ -580,31 +416,15 @@ static void mix_locked(cmpc_audio *a, float *mix, size_t frames) {
         }
         done += n;
     }
-    clock_point(a, a->written + frames, a->song_out);
+    cmpc_heard_clock_note(a->clock, a->written + frames, cmpc_stretch_position(a->stretch));
     for (size_t i = 0; i < frames * 2; i++) mix[i] *= a->master;
 }
 
 // After `frames` more device frames were written, with `delay` frames still queued
-// in the device: which song frame is being heard now, between the points noted
-// while mixing. Called with the lock held.
+// in the device. Called with the lock held.
 static void advance_clock_locked(cmpc_audio *a, size_t frames, uint64_t delay) {
     a->written += frames;
-    if (a->point_count == 0) return;
-    uint64_t heard = a->written > delay ? a->written - delay : 0;
-    double song = a->points[a->point_head].song;
-    for (int k = a->point_count - 1; k >= 0; k--) {
-        int i = (a->point_head + k) % CLOCK_POINTS;
-        if (a->points[i].device > heard) continue;
-        song = a->points[i].song;
-        if (k + 1 < a->point_count) {
-            int j = (a->point_head + k + 1) % CLOCK_POINTS;
-            uint64_t span = a->points[j].device - a->points[i].device;
-            if (span > 0) song += (a->points[j].song - a->points[i].song) * (double)(heard - a->points[i].device) / span;
-        }
-        break;
-    }
-    a->heard_song = song;
-    a->heard_at = now_sec();
+    cmpc_heard_clock_hear(a->clock, a->written > delay ? a->written - delay : 0, now_sec());
 }
 
 static void *mixer_thread(void *arg) {
@@ -675,7 +495,8 @@ cmpc_audio *cmpc_audio_open(char *err, size_t err_len) {
     a->master = 1.0f;
     for (int slot = 0; slot < CMPC_AUDIO_EFFECT_SLOTS; slot++) a->effects[slot].gain = 1.0f;
     a->speed = 1.0;
-    stretch_reset(&a->stretch);
+    a->stretch = cmpc_stretch_new(mix_stems, a);
+    a->clock = cmpc_heard_clock_new();
     pthread_mutex_init(&a->lock, NULL);
     a->running = 1;
     if (pthread_create(&a->thread, NULL, mixer_thread, a)) {
@@ -696,7 +517,8 @@ cmpc_audio *cmpc_audio_open_offline(unsigned rate) {
     a->master = 1.0f;
     for (int slot = 0; slot < CMPC_AUDIO_EFFECT_SLOTS; slot++) a->effects[slot].gain = 1.0f;
     a->speed = 1.0;
-    stretch_reset(&a->stretch);
+    a->stretch = cmpc_stretch_new(mix_stems, a);
+    a->clock = cmpc_heard_clock_new();
     pthread_mutex_init(&a->lock, NULL);
     return a;
 }
@@ -720,6 +542,8 @@ void cmpc_audio_close(cmpc_audio *a) {
     }
     for (int s = 0; s < a->stem_count; s++) stem_free(a->stems[s]);
     for (int slot = 0; slot < CMPC_AUDIO_EFFECT_SLOTS; slot++) free(a->effects[slot].samples);
+    cmpc_stretch_free(a->stretch);
+    cmpc_heard_clock_free(a->clock);
     pthread_mutex_destroy(&a->lock);
     free(a);
 }
@@ -764,8 +588,7 @@ void cmpc_audio_clear_stems(cmpc_audio *a) {
     a->stem_count = 0;
     a->scheduled_count = 0;
     a->playing = 0;
-    stretch_reset(&a->stretch);
-    clock_reset(a);
+    song_reset(a);
     pthread_mutex_unlock(&a->lock);
     for (int s = 0; s < count; s++) stem_free(old[s]);
 }
@@ -783,8 +606,7 @@ void cmpc_audio_rewind(cmpc_audio *a) {
     }
     a->playing = 0;
     a->scheduled_count = 0;
-    stretch_reset(&a->stretch);
-    clock_reset(a);
+    song_reset(a);
     pthread_mutex_unlock(&a->lock);
 }
 
@@ -808,14 +630,9 @@ void cmpc_audio_pause(cmpc_audio *a) {
 
 double cmpc_audio_position(cmpc_audio *a) {
     pthread_mutex_lock(&a->lock);
-    double pos = a->heard_song / a->rate;
-    // Between device writes, run on with the wall clock while playing, but never
-    // past what has been mixed.
-    if (a->playing && a->heard_at > 0) {
-        pos += (now_sec() - a->heard_at) * a->speed;
-        double mixed = a->song_out / a->rate;
-        if (pos > mixed) pos = mixed;
-    }
+    // Between device writes it runs on with the wall clock while playing.
+    double pos = cmpc_heard_clock_song_frame(a->clock, now_sec(), a->playing ? a->speed * a->rate : 0,
+                                             cmpc_stretch_position(a->stretch)) / a->rate;
     pthread_mutex_unlock(&a->lock);
     return pos;
 }

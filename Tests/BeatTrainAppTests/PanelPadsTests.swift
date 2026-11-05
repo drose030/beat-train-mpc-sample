@@ -31,33 +31,3 @@ struct PanelPadsTests {
         #expect(lights.changes(to: [Color](repeating: .black, count: 8)).isEmpty)
     }
 }
-
-/// Which pads get a row on the horizontal highway, and in which order.
-struct HorizontalRowsTests {
-    private func session(_ targets: [DrumTarget]) throws -> GameSession {
-        let tempo = try TempoMap(ppq: 480, changes: [(tick: 0, bpm: 120)])
-        let notes = targets.enumerated().map { DrumNoteEvent(tick: $0.offset * 480, timeSec: Double($0.offset) / 2, target: $0.element, velocity: 100) }
-        return GameSession(chart: DrumChart(tempoMap: tempo, notes: notes), kit: DrumKit(), timing: PlayerSettings().timing)
-    }
-
-    @Test func onlyUsedPadsCymbalsOnTopKickAtTheBottom() throws {
-        let kick = DrumTarget(lane: 0, row: .bottom), snare = DrumTarget(lane: 0, row: .top), cymbal = DrumTarget(lane: 3, row: .top)
-        let rows = BeatTrainApp.horizontalRows(for: try session([kick, snare, cymbal, snare]), kit: DrumKit())
-        #expect(rows == [cymbal, snare, kick].map(DrumKit.pad(forLayout:)))
-    }
-
-    @Test func byPadLanesFollowThePanel() {
-        let pads = [DrumTarget(lane: 3, row: .top), DrumTarget(lane: 0, row: .top), DrumTarget(lane: 0, row: .bottom), DrumTarget(lane: 3, row: .bottom)]
-            .map(DrumKit.pad(forLayout:))
-        // Panel column by column, the upper panel row (the kick's) first.
-        let expected = [DrumTarget(lane: 0, row: .bottom), DrumTarget(lane: 0, row: .top), DrumTarget(lane: 3, row: .bottom), DrumTarget(lane: 3, row: .top)]
-            .map(DrumKit.pad(forLayout:))
-        #expect(BeatTrainApp.padLanes(pads) == expected)
-    }
-
-    @Test func withoutNotesEveryPadWithAVoice() throws {
-        let rows = BeatTrainApp.horizontalRows(for: try session([]), kit: DrumKit())
-        #expect(rows.count == (0..<DrumKit.padCount).filter { DrumKit().voice(forPad: $0) != .off }.count)
-        #expect(rows.last == DrumKit.pad(forLayout: DrumTarget(lane: 0, row: .bottom)), "kick at the bottom")
-    }
-}

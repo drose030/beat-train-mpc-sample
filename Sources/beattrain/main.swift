@@ -46,50 +46,39 @@ func writePPM(_ canvas: Canvas, to path: String, quiet: Bool = false) {
 func renderPreviews(app: BeatTrainApp, into directory: String) {
     var canvas = Canvas(width: 320, height: 240)
     var now = 1000.0
+    var shots = 0
     func shot(_ name: String) {
+        shots += 1
         app.render(into: &canvas, now: now)
-        writePPM(canvas, to: "\(directory)/\(name).ppm")
+        writePPM(canvas, to: "\(directory)/\(shots)-\(name).ppm")
     }
-    shot("1-library")
-    app.handle(.encoder(delta: 1), now: now)
-    app.handle(.button(.dataPush, pressed: true), now: now)
-    shot("2-difficulty")
-    app.handle(.button(.dataPush, pressed: true), now: now)
-    shot("3-loading")
-    app.tick(now: now)  // the loading screen is up
-    app.tick(now: now)  // the song loads
-    now += 1.2
-    shot("4-countin")
-    guard case let .playing(play) = app.screen else { return log("no chart started") }
-    // Hit three of four notes up to the 40th, then look at the highway.
-    let notes = play.session.chart.notes
-    let stopIndex = min(40, notes.count - 1)
-    for (index, note) in notes.prefix(stopIndex).enumerated() {
-        now = app.playback.startsAt + note.timeSec
-        app.tick(now: now)
-        if index % 4 != 3 {
-            let pad = DrumKit.pad(forLayout: app.kit.target(remapping: note.target))
-            app.handle(.padDown(pad: PanelPads.panelPad(forPad: pad), velocity: 100), now: now + 0.01)
-        }
+    // Hit three of four notes up to 0.6 s before the 40th, then look at the highway.
+    guard var song = PlayThrough(app: app, song: 1, now: now, misses: { $0 % 4 == 3 }, shot: shot) else { return log("no chart started") }
+    song.step(1.2)
+    now = song.now
+    shot("countin")
+    let notes = song.play?.session.chart.notes ?? []
+    if !notes.isEmpty {
+        song.countIn()
+        song.play(until: notes[min(40, notes.count - 1)].timeSec - 0.6)
+        now = song.now
     }
-    now = app.playback.startsAt + notes[stopIndex].timeSec - 0.6
-    app.tick(now: now)
-    shot("5-playing")
+    shot("playing")
     app.handle(.button(.stop, pressed: true), now: now)
-    shot("6-results")
+    shot("results")
     app.handle(.button(.dataPush, pressed: true), now: now)
     app.handle(.button(.screen3, pressed: true), now: now)
     app.handle(.padDown(pad: 5, velocity: 100), now: now)   // panel pad 6: unused by default
     app.handle(.encoder(delta: 3), now: now)               // off -> kick -> snare -> hi-hat
-    shot("7-padsetup")
+    shot("padsetup")
     app.handle(.button(.stop, pressed: true), now: now)
     app.handle(.button(.screen2, pressed: true), now: now)
     app.handle(.encoder(delta: 3), now: now)                // METRONOME
     app.handle(.button(.dataPush, pressed: true), now: now)
     app.handle(.encoder(delta: 12), now: now)               // 60 %
-    shot("8-settings")
+    shot("settings")
     app.powerButtonPressed(now: now)
-    shot("9-shutdown")
+    shot("shutdown")
 }
 
 let arguments = CommandLine.arguments

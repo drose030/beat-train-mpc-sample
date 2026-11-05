@@ -1,3 +1,5 @@
 #include "cmpc_audio.h"
 #include "cmpc_display.h"
+#include "cmpc_heard_clock.h"
 #include "cmpc_rawmidi.h"
+#include "cmpc_stretch.h"

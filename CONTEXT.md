@@ -54,7 +54,7 @@ Pure hit-detection. Given the chart notes, note states, the **DrumKit** and the 
 The running tally (hits, misses, overhits, streak, max streak) as a value type advanced by `registerHit` / `registerOverhit` / `registerMisses`. An overhit counts as both an overhit and a miss and breaks the streak.
 
 **GameplayFeedback / FeedbackDirector**:
-The bridge from a pure **Judgement** to side effects. The director translates a judgement (or batch of auto-misses) into `GameplayFeedback` actions (flash a lane, mute/unmute drums, play the miss cue); the app flashes the lanes and **SongPlayback** plays the audio parts. The gameplay-audio/visual policy lives in this one pure place.
+The bridge from a pure **Judgement** to side effects. The director translates a judgement (or batch of auto-misses) into `GameplayFeedback` actions (flash the note's **DrumTarget** green or red, mute/unmute drums, play the miss cue); the app's **Pad feedback** shows the flashes and **SongPlayback** plays the audio parts. The gameplay-audio/visual policy lives in this one pure place.
 
 **TimingConfiguration**:
 The hit-timing rules as one value type with invariants enforced at construction: the total hit window, its front/back split (`back = total − front`), and the player's timing offset. Derived from the stored settings; the single owner of the clamping constants. Distinct from a song's **chart delay** (per-song metadata, combined at the call site).
@@ -92,11 +92,26 @@ Akai's `MPC Sample` program, run by `ac50.service`.
 ### MPC app (`Sources/beattrain`)
 
 **SongPlayback**:
-The music of the song being played and its clock: the stems in the audio engine, the count-in, pause and restart (and the 3-2-1 back from the settings), the **Song speed**, metronome clicks and the miss feedback (drum mute, miss cue). The one owner of "what time is it in the chart" — the engine position once the count-in is over (stems or not), a timer without an engine; the chart delay and timing offset apply either way.
+The music of the song being played: the stems in the audio engine, start, pause and restart, metronome clicks and the miss feedback (drum mute, miss cue). The one owner of "what time is it in the chart", through its **Song clock**.
 _Avoid_: "audio" for this (that is the engine underneath).
+
+**Song clock** (`SongClock`):
+Where a song stands in time and from it the chart time: the count-in, pause and the 3-2-1 back from the settings, the **Song speed**, the chart delay and the timing offset (scaled with the speed). Its song seconds come from the engine position once the count-in is over (stems or not), else from a timer; tests step either.
+
+**Heard clock** (`heard_clock.c`):
+In the audio engine: which song frame is being heard, from notes of which song frame went out at which device frame and the device's delay. **Song clock** reads it as the engine position.
+
+**Time stretch** (`stretch.c`):
+In the audio engine: the mixed stems played slower at the same pitch (WSOLA), for the **Song speed**. At full speed the song passes through unchanged.
+
+**Stem** (`Stem`):
+One audio file of a song folder: `song`, `drums`, `guitar`, `bass`, `rhythm`, `vocals`, `keys` or `crowd` (the original game's set). Volumes per stem are kept by these names in **PlayerSettings**.
 
 **SettingsKeeper**:
 The player's settings while the app runs: the one way to change them (settings line, encoder step, knob turn, pad voice), which knob turns which setting (`knobs`, the source of the K1–K3 labels) and which **Stem group** with SHIFT held (`mixKnobs`), and saving a moment after the last change through a **SettingsStorage** adapter (`SettingsFile` on the card; in memory in tests).
+
+**Relative control** (`RelativeControl`):
+A knob or the fader setting a value by how far it moves since its last report, not to where it stands (the MPC does not report where knobs stand at start). The first report only tells where it stands; small moves add up; a value changed elsewhere is where it goes on from. K1–K3 (with SHIFT or not) and SHIFT+FADER work this way.
 
 **ControlHints**:
 What the controls do on the current screen, as the screen shows it: the B1–B3 labels and the footer (none while playing; the K1–K3 bar is on every screen). Kept next to the input handlers, so a label and its action change together.
@@ -110,17 +125,26 @@ Where things are when Beat-Train starts: the song folders (`--songs`, `$BEATTRAI
 **Lifecycle**:
 Running, asking to shut down, quitting to the stock app, or powering off. Every way out goes through `quit(powerOff:)`, which stops the song and saves the settings; the exit code (10 = power off) is what `session.sh` reads.
 
+**Highway** (`Highway`):
+The play screen's note highway as geometry, for a **Highway layout** and **Strike line**: its lanes and the **Pads** each shows, where a chart time lies along it, and which notes and beat lines are on it at a moment. The screen paints what it says.
+
+**Pad feedback** (`PadFeedback`):
+What the play screen shows of strikes, for a moment each, kept per **Pad**: which pads were just struck (their lights, panel maps and lanes) and how each pad's last note was judged (green or red at the strike line). The four-lane highway asks per **Lane**.
+
+**Play-through** (`PlayThrough`):
+A song played by script as a player would: picked in the song list and started, its notes struck as they come due, some left to miss. Previews, the README's animations and the app tests play this way.
+
 **Highway layout**:
 How the note highway runs on the play screen: vertical (4 **Lanes**, notes come down, each note's halves are the two **Rows**), vertical by pad (one column per **Pad** the chart uses, in panel order) or horizontal (one row per **Pad** the chart uses, notes run right to left). A **PlayerSettings** value. Distinct from **Row**, which is part of a **DrumTarget**.
 
 **Strike line**:
-The line on the highway where a note is to be struck: chart time 0, notes to come on one side, passed ones on the other. Sits near the end the notes run to, or a quarter, a third or half way in (a **PlayerSettings** value, for every **Highway layout**); further in shows more passed notes and less of what comes.
+The line on the **Highway** where a note is to be struck: chart time 0, notes to come on one side, passed ones on the other. Sits near the end the notes run to, or a quarter, a third or half way in (a **PlayerSettings** value, for every **Highway layout**); further in shows more passed notes and less of what comes.
 
 **Song speed**:
 How fast the song plays, 50–100 %, for practising (SHIFT+FADER). Slower at the same pitch; chart time is song time, so the notes and the hit window slow down with it. Not saved; distinct from a song's tempo (**TempoMap**).
 
 **Stem group**:
-The stems SHIFT+K1–K3 turn together: the `song` stem, the `drums`, and all the others. Changes the per-stem volumes in **PlayerSettings**, each stem keeping its distance to the rest of its group.
+The **Stems** SHIFT+K1–K3 turn together: the `song` stem, the `drums`, and all the others. Changes the per-stem volumes in **PlayerSettings**, each stem keeping its distance to the rest of its group.
 
 ## Relationships
 

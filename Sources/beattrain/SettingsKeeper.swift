@@ -37,11 +37,11 @@ enum StemGroup: CaseIterable {
         }
     }
 
-    var stems: [String] {
+    var stems: [Stem] {
         switch self {
-        case .song: ["song"]
-        case .drums: ["drums"]
-        case .others: SongPlayback.stemNames.filter { $0 != "song" && $0 != "drums" }
+        case .song: [.song]
+        case .drums: [.drums]
+        case .others: Stem.allCases.filter { $0 != .song && $0 != .drums }
         }
     }
 }
@@ -73,13 +73,8 @@ final class SettingsKeeper {
 
     private let storage: SettingsStorage?
     private var changedAt: Double?
-    /// The knobs' last values: a knob moves its setting by how far it turns, so a
-    /// saved value does not jump to wherever the knob happens to stand.
-    private var lastKnob: [PanelControl: UInt8] = [:]
-    /// Each knob's value before rounding to the setting's step.
-    private var knobAccumulator: [PanelControl: Double] = [:]
-    /// With SHIFT: how far each knob turned that is not yet a whole volume step.
-    private var mixAccumulator: [PanelControl: Double] = [:]
+    /// K1–K3, the same with SHIFT held or not.
+    private var knobControls: [PanelControl: RelativeControl] = [:]
 
     /// `storage` nil: the defaults, never saved.
     init(storage: SettingsStorage?) {
@@ -110,17 +105,11 @@ final class SettingsKeeper {
     /// knob, and for a knob's first report, which only tells where it stands.
     @discardableResult
     func turn(_ control: PanelControl, to value: UInt8, now: Double) -> SettingsItem? {
-        guard let item = Self.knobs.first(where: { $0.control == control })?.item else { return nil }
-        defer { lastKnob[control] = value }
-        guard let last = lastKnob[control] else { return nil }
-        let value0 = item.value(in: current)
-        var accumulated = knobAccumulator[control] ?? value0
-        // Changed elsewhere (settings screen, ERASE): start from the new value.
-        if abs(accumulated - value0) >= item.step { accumulated = value0 }
-        let range = item.range(in: current)
-        accumulated = min(max(accumulated + Double(Int(value) - Int(last)) * item.fullTurn / 127, range.lowerBound), range.upperBound)
-        knobAccumulator[control] = accumulated
-        set(item, to: accumulated, now: now)
+        guard let item = Self.knobs.first(where: { $0.control == control })?.item,
+              let moved = knobControls[control, default: RelativeControl()].move(
+                  to: value, from: item.value(in: current), step: item.step, travel: item.fullTurn, range: item.range(in: current))
+        else { return nil }
+        set(item, to: moved, now: now)
         return item
     }
 
@@ -130,27 +119,27 @@ final class SettingsKeeper {
     /// the group; nil for a control that is no knob, a knob's first report, and a
     /// group with none of its stems present.
     @discardableResult
-    func turnMix(_ control: PanelControl, to value: UInt8, present: Set<String>?, now: Double) -> StemGroup? {
+    func turnMix(_ control: PanelControl, to value: UInt8, present: Set<Stem>?, now: Double) -> StemGroup? {
         guard let group = Self.mixKnobs.first(where: { $0.control == control })?.group else { return nil }
-        defer { lastKnob[control] = value }
-        guard let last = lastKnob[control] else { return nil }
         let stems = group.stems.filter { present?.contains($0) ?? true }
-        guard !stems.isEmpty else { return nil }
-        let step = SettingsItem.stem("").step
-        let moved = (mixAccumulator[control] ?? 0) + Double(Int(value) - Int(last)) / 127
-        let steps = (moved / step).rounded(.towardZero)
-        mixAccumulator[control] = moved - steps * step
-        guard steps != 0 else { return group }
+        // The loudest stem moves as a stem's line would; the others by as much.
+        let item = SettingsItem.stem(stems.first ?? .song)
+        let level = level(of: group, present: present)
+        guard let moved = knobControls[control, default: RelativeControl()].move(
+                  to: value, from: level, step: item.step, travel: item.fullTurn, range: item.range(in: current)),
+              !stems.isEmpty
+        else { return nil }
+        let steps = (moved / item.step).rounded() - (level / item.step).rounded()
         var settings = current
-        for name in stems {
-            settings.stemVolumes[name] = ((settings.stemVolume(name) + steps * step) / step).rounded() * step
+        for stem in stems {
+            settings.stemVolumes[stem] = ((settings.stemVolume(stem) + steps * item.step) / item.step).rounded() * item.step
         }
-        commit(settings, item: .stem(stems[0]), now: now)
+        commit(settings, item: item, now: now)
         return group
     }
 
     /// The level SHIFT+knob shows for a group: its loudest stem in `present`.
-    func level(of group: StemGroup, present: Set<String>?) -> Double {
+    func level(of group: StemGroup, present: Set<Stem>?) -> Double {
         group.stems.filter { present?.contains($0) ?? true }.map(current.stemVolume).max() ?? 1
     }
 

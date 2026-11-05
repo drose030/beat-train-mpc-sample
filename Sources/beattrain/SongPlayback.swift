@@ -15,27 +15,19 @@ import MPCHardware
 
 /// The music of the song being played and its clock: the stems in the audio
 /// engine, the count-in, pause and restart, the metronome clicks and the miss
-/// feedback. The one owner of "what time is it in the chart".
+/// feedback. The one owner of "what time is it in the chart", through its
+/// `SongClock`.
 ///
 /// Once the count-in is over the clock is the engine's position, stems or not
 /// (an engine without stems still counts, so clicks land on the beat). Without
-/// an engine (previews, tests) a timer stands in. Either way the chart delay and
-/// the player's timing offset apply, and the song may run slower (`speed`).
+/// an engine (previews, tests) a timer stands in.
 final class SongPlayback {
-    static let leadInSec = 3.0
-    /// The stems the original game plays, in its order; all present ones play together.
-    static let stemNames = ["song", "drums", "guitar", "bass", "rhythm", "vocals", "keys", "crowd"]
     /// Stem file types the audio engine plays, in the order they are looked for.
     static let stemExtensions = ["mp3", "ogg", "wav"]
     /// The original game's gain for the drum stem after a miss.
     static let mutedDrumsGain: Float = 0.2
     /// How far ahead metronome clicks are handed to the audio engine.
     static let clickLookaheadSec = 0.3
-    /// The count-in before the song goes on after the settings: 3, 2, 1.
-    static let resumeCountInSec = 3.0
-    /// The song speeds there are, for practising: slower at the same pitch.
-    static let speedRange = 0.5...1.0
-    static let speedStep = 0.05
 
     /// The one-shot sounds the player can set the level of.
     enum Sound {
@@ -57,27 +49,26 @@ final class SongPlayback {
     private var settings = PlayerSettings()
     private var song: SongMetadata?
     private var beatTimes: [Double] = []
-    private var stemIndices: [String: Int] = [:]
+    private var stemIndices: [Stem: Int] = [:]
     private var drumsMuted = false
-    private var begun = false
-    private var musicStarted = false
     private var nextBeat = 0
-    /// Without an engine, the song clock once the music has started: song seconds
-    /// at monotonic time `at`.
-    private var timer: (base: Double, at: Double)?
+    private var clock: SongClock
+    /// The time now, for the end of loading (which takes real time).
+    private let monotonic: () -> Double
 
-    /// Song seconds per second, in `speedRange`. Stays for the next songs; not saved.
-    private(set) var speed = 1.0
-
+    /// Song seconds per second, in `SongClock.speedRange`. Stays for the next
+    /// songs; not saved.
+    var speed: Double { clock.speed }
     /// Monotonic time at which the count-in ends and the music starts.
-    private(set) var startsAt = 0.0
-    private(set) var pausedAt: Double?
+    var startsAt: Double { clock.startsAt }
     /// Counting in to go on after a pause: when the song goes on.
-    private(set) var resumesAt: Double?
+    var resumesAt: Double? { clock.resumesAt }
 
     /// `missSound`: the bytes of an MP3, Ogg Vorbis or WAV file.
-    init(audio: AudioEngine?, missSound: [UInt8]? = nil) {
+    init(audio: AudioEngine?, missSound: [UInt8]? = nil, monotonic: @escaping () -> Double = monotonicSeconds) {
         self.audio = audio
+        self.monotonic = monotonic
+        clock = SongClock(enginePosition: audio.map { audio in { audio.position } })
         guard let audio else { return }
         do {
             if let missSound { try audio.loadEffect(slot: Self.missSlot, encoded: missSound) }
@@ -97,12 +88,12 @@ final class SongPlayback {
         self.song = song
         self.beatTimes = beatTimes
         guard let audio else { return false }
-        for name in Self.stemNames {
+        for stem in Stem.allCases {
             for type in Self.stemExtensions {
-                let url = song.songFolderURL.appendingPathComponent("\(name).\(type)")
+                let url = song.songFolderURL.appendingPathComponent("\(stem.rawValue).\(type)")
                 guard let data = try? Data(contentsOf: url) else { continue }
                 do {
-                    stemIndices[name] = try audio.addStem(encoded: [UInt8](data))
+                    stemIndices[stem] = try audio.addStem(encoded: [UInt8](data))
                 } catch {
                     log("stem \(url.lastPathComponent): \(error)")
                 }
@@ -110,7 +101,7 @@ final class SongPlayback {
             }
         }
         applyGains()
-        log("stems: \(stemIndices.keys.sorted()) for \(song.title), \((audio.duration * 10).rounded() / 10) s")
+        log("stems: \(Stem.allCases.filter { stemIndices[$0] != nil }.map(\.rawValue)) for \(song.title), \((audio.duration * 10).rounded() / 10) s")
         return hasMusic
     }
 
@@ -120,13 +111,11 @@ final class SongPlayback {
         song = nil
         beatTimes = []
         drumsMuted = false
-        begun = false
-        pausedAt = nil
-        resumesAt = nil
+        clock.stop()
     }
 
     /// The stems of the loaded song; nil without a song.
-    var loadedStems: Set<String>? {
+    var loadedStems: Set<Stem>? {
         song == nil ? nil : Set(stemIndices.keys)
     }
 
@@ -140,51 +129,37 @@ final class SongPlayback {
         audio?.rewind()
         drumsMuted = false
         applyGains()
-        begun = true
-        musicStarted = false
-        timer = nil
         nextBeat = 0
-        pausedAt = nil
-        resumesAt = nil
-        startsAt = now + Self.leadInSec
+        clock.begin(now: now)
     }
 
     /// `begin` right after `load`: with an engine, loading took real time, so the
     /// count-in runs from when it is done.
     func beginAfterLoading(now: Double) {
-        begin(now: audio == nil ? now : monotonicSeconds())
+        begin(now: audio == nil ? now : monotonic())
     }
 
     func pause(now: Double) {
-        guard begun, pausedAt == nil else { return }
-        pausedAt = now
-        audio?.pause()
+        if clock.pause(now: now) { audio?.pause() }
     }
 
     func resume(now: Double) {
-        guard let pausedAt else { return }
-        resumesAt = nil
-        if !musicStarted { startsAt += now - pausedAt }
-        timer?.at += now - pausedAt
-        self.pausedAt = nil
-        if musicStarted { audio?.play() }
+        if clock.resume(now: now) { audio?.play() }
     }
 
-    /// Goes on after a count-in of `resumeCountInSec`, paused until then; at once
-    /// while the song's own count-in still runs.
+    /// Goes on after a count-in of `SongClock.resumeCountInSec`, paused until
+    /// then; at once while the song's own count-in still runs.
     func resumeAfterCountIn(now: Double) {
-        guard pausedAt != nil else { return }
-        guard musicStarted else { return resume(now: now) }
-        resumesAt = now + Self.resumeCountInSec
+        clock.resumeAfterCountIn(now: now)
     }
 
     var isPaused: Bool {
-        pausedAt != nil
+        clock.isPaused
     }
 
     /// Counting in or playing, not paused.
     var isRunning: Bool {
-        begun && pausedAt == nil
+        clock.isRunning
     }
 
     /// The music goes on (after the last note it plays to its end).
@@ -197,49 +172,26 @@ final class SongPlayback {
     /// Chart seconds at `now`: negative during the count-in, then the song clock
     /// shifted by the chart delay and the timing offset.
     func chartTime(now: Double) -> Double {
-        let clock = songClock(now: now)
-        guard clock >= 0 else { return clock }
-        // The offset makes up for delays in real time (sound out, strike in), which
-        // are fewer song seconds when the song runs slower.
-        let timing = settings.timing
-        let scaled = TimingConfiguration(totalSec: timing.hitWindowTotalSec, frontSec: timing.hitWindowFrontSec,
-                                         offsetMs: timing.timingOffsetMs * speed)
-        return GameSession.chartTime(audioTime: clock, chartDelayMs: song?.chartDelayMilliseconds ?? 0, timing: scaled)
+        clock.chartTime(now: now, chartDelayMs: song?.chartDelayMilliseconds ?? 0, timingOffsetMs: settings.timing.timingOffsetMs)
     }
 
-    /// Song seconds: the count-in (real seconds, negative), then the engine or the timer.
-    private func songClock(now: Double) -> Double {
-        if musicStarted, let audio { return audio.position }
-        if let timer { return timer.base + ((pausedAt ?? now) - timer.at) * speed }
-        return (pausedAt ?? now) - startsAt
-    }
-
-    /// Sets the song speed, rounded to `speedStep` and kept in `speedRange`.
+    /// Sets the song speed, rounded to `SongClock.speedStep` and kept in its range.
     func setSpeed(_ value: Double, now: Double) {
-        let rounded = min(max((value / Self.speedStep).rounded() * Self.speedStep, Self.speedRange.lowerBound), Self.speedRange.upperBound)
-        guard rounded != speed else { return }
-        if timer != nil { timer = (songClock(now: now), pausedAt ?? now) }
-        speed = rounded
-        audio?.speed = rounded
+        if clock.setSpeed(value, now: now) { audio?.speed = clock.speed }
     }
 
     /// Starts the music when the count-in is over and hands the engine the next
     /// metronome clicks.
     func tick(now: Double) {
-        if let resumesAt, now >= resumesAt { resume(now: resumesAt) }
-        guard isRunning else { return }
-        if !musicStarted, now >= startsAt {
-            audio?.play()
-            musicStarted = true
-            if audio == nil { timer = (now - startsAt, now) }
-        }
+        if clock.tick(now: now) { audio?.play() }
+        guard clock.isRunning else { return }
         scheduleClicks()
     }
 
     /// Clicks sit on the song's beats (the chart's beat grid plus the chart
     /// delay), not shifted by the timing offset, placed to the sample by the engine.
     private func scheduleClicks() {
-        guard settings.metronomeVolume > 0, musicStarted, let audio else { return }
+        guard settings.metronomeVolume > 0, clock.musicStarted, let audio else { return }
         let delay = (song?.chartDelayMilliseconds ?? 0) / 1000
         let position = audio.position
         while nextBeat < beatTimes.count {
@@ -267,7 +219,7 @@ final class SongPlayback {
             applyGains()
         case .playMissSFX:
             if settings.missSoundVolume > 0 { audio?.triggerEffect(slot: Self.missSlot) }
-        case .flashLane:
+        case .flashTarget:
             break
         }
     }
@@ -289,9 +241,9 @@ final class SongPlayback {
         guard let audio else { return }
         audio.setEffectGain(Float(settings.missSoundVolume), slot: Self.missSlot)
         audio.setEffectGain(Float(settings.metronomeVolume), slot: Self.clickSlot)
-        for (name, index) in stemIndices {
-            let muted = name == "drums" && drumsMuted
-            audio.setGain(Float(settings.stemVolume(name)) * (muted ? Self.mutedDrumsGain : 1), forStem: index)
+        for (stem, index) in stemIndices {
+            let muted = stem == .drums && drumsMuted
+            audio.setGain(Float(settings.stemVolume(stem)) * (muted ? Self.mutedDrumsGain : 1), forStem: index)
         }
     }
 }

@@ -349,17 +349,16 @@ int cmpc_display_present(cmpc_display *d, const uint32_t *pixels) {
 
 // Copies one changed rectangle into the shown buffer and sends it as its own
 // update. 1 when the driver has no damage clips (nothing sent), else 0 or -errno.
-static int send_rect(cmpc_display *d, struct buffer *front, const uint32_t *pixels,
-                     uint32_t x0, uint32_t y0, uint32_t x1, uint32_t y1) {
-    size_t span = (size_t)(x1 - x0) * 4;
-    for (uint32_t y = y0; y < y1; y++) {
-        size_t at = (size_t)y * d->width + x0;
-        memcpy(front->map + (size_t)y * front->pitch + (size_t)x0 * 4, pixels + at, span);
+static int send_rect(cmpc_display *d, struct buffer *front, const uint32_t *pixels, cmpc_rect r) {
+    size_t span = (size_t)(r.x1 - r.x0) * 4;
+    for (uint32_t y = r.y0; y < r.y1; y++) {
+        size_t at = (size_t)y * d->width + r.x0;
+        memcpy(front->map + (size_t)y * front->pitch + (size_t)r.x0 * 4, pixels + at, span);
         memcpy(d->shown + at, pixels + at, span);
     }
     // One rectangle per call: the driver merges the clips of one call into a
     // single rectangle.
-    struct drm_clip_rect clip = { (uint16_t)x0, (uint16_t)y0, (uint16_t)x1, (uint16_t)y1 };
+    struct drm_clip_rect clip = { (uint16_t)r.x0, (uint16_t)r.y0, (uint16_t)r.x1, (uint16_t)r.y1 };
     struct drm_mode_fb_dirty_cmd dirty = {
         .fb_id = front->fb_id, .num_clips = 1, .clips_ptr = (uint64_t)(uintptr_t)&clip,
     };
@@ -370,41 +369,22 @@ static int send_rect(cmpc_display *d, struct buffer *front, const uint32_t *pixe
 
 int cmpc_display_present_strips(cmpc_display *d, const uint32_t *pixels, uint32_t strip, int columns) {
     if (!d->use_dirty_clips || strip == 0) return cmpc_display_present(d, pixels);
-    struct buffer *front = &d->buffers[d->front];
     uint32_t length = columns ? d->width : d->height;
-    for (uint32_t s0 = 0; s0 < length; s0 += strip) {
-        uint32_t s1 = s0 + strip < length ? s0 + strip : length;
-        // The changed part of this strip, across it.
-        uint32_t lo = UINT32_MAX, hi = 0;
-        if (columns) {
-            size_t span = (size_t)(s1 - s0) * 4;
-            for (uint32_t y = 0; y < d->height; y++) {
-                size_t at = (size_t)y * d->width + s0;
-                if (memcmp(d->shown + at, pixels + at, span) == 0) continue;
-                if (lo == UINT32_MAX) lo = y;
-                hi = y + 1;
-            }
-        } else {
-            for (uint32_t y = s0; y < s1; y++) {
-                const uint32_t *old = d->shown + (size_t)y * d->width, *now = pixels + (size_t)y * d->width;
-                uint32_t a = 0, b = d->width;
-                while (a < b && old[a] == now[a]) a++;
-                while (b > a && old[b - 1] == now[b - 1]) b--;
-                if (a == b) continue;
-                if (a < lo) lo = a;
-                if (b > hi) hi = b;
-            }
-        }
-        if (lo == UINT32_MAX) continue;
-        int rc = columns ? send_rect(d, front, pixels, s0, lo, s1, hi)
-                         : send_rect(d, front, pixels, lo, s0, hi, s1);
-        if (rc < 0) return rc;
+    size_t max = (length + strip - 1) / strip;
+    cmpc_rect rects[max];
+    size_t count = cmpc_changed_strips(d->shown, pixels, d->width, d->height, strip, columns, rects, max);
+    struct buffer *front = &d->buffers[d->front];
+    int rc = 0;
+    for (size_t i = 0; i < count; i++) {
+        rc = send_rect(d, front, pixels, rects[i]);
+        if (rc < 0) break;
         if (rc == 1) {
             d->use_dirty_clips = 0;
-            return cmpc_display_present(d, pixels);
+            rc = cmpc_display_present(d, pixels);
+            break;
         }
     }
-    return 0;
+    return rc;
 }
 
 void cmpc_display_close(cmpc_display *d) {

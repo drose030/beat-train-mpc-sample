@@ -56,8 +56,8 @@ public struct PlayerSettings: Codable, Equatable, Sendable {
     public var missSoundVolume: Double {
         didSet { missSoundVolume = Self.clampVolume(missSoundVolume) }
     }
-    /// Volume per stem name ("drums", "vocals"…), 0–1; a missing stem is at 1.
-    public var stemVolumes: [String: Double] {
+    /// Volume per stem, 0–1; a missing stem is at 1.
+    public var stemVolumes: [Stem: Double] {
         didSet { stemVolumes = stemVolumes.mapValues(Self.clampVolume) }
     }
     /// Which voice each of the eight pads plays (see `DrumKit.padVoices`).
@@ -75,7 +75,7 @@ public struct PlayerSettings: Codable, Equatable, Sendable {
         earlyWindowMs: Double = PlayerSettings.defaultEarlyWindowMs,
         metronomeVolume: Double = 0,
         missSoundVolume: Double = PlayerSettings.defaultMissSoundVolume,
-        stemVolumes: [String: Double] = [:],
+        stemVolumes: [Stem: Double] = [:],
         padVoices: [Int: DrumVoice] = DrumKit.defaultPadVoices,
         highwayLayout: HighwayLayout = .vertical,
         strikeLine: StrikeLinePosition = .edge
@@ -101,7 +101,7 @@ public struct PlayerSettings: Codable, Equatable, Sendable {
         TimingConfiguration(totalSec: hitWindowMs / 1000, frontSec: earlyWindowMs / 1000, offsetMs: timingOffsetMs)
     }
 
-    public func stemVolume(_ stem: String) -> Double {
+    public func stemVolume(_ stem: Stem) -> Double {
         stemVolumes[stem] ?? 1
     }
 
@@ -132,7 +132,10 @@ public struct PlayerSettings: Codable, Equatable, Sendable {
             earlyWindowMs: value(Double.self, .earlyWindowMs) ?? Self.defaultEarlyWindowMs,
             metronomeVolume: value(Double.self, .metronomeVolume) ?? 0,
             missSoundVolume: value(Double.self, .missSoundVolume) ?? Self.defaultMissSoundVolume,
-            stemVolumes: value([String: Double].self, .stemVolumes) ?? [:],
+            // By name; a stem this version does not know is dropped.
+            stemVolumes: Dictionary(uniqueKeysWithValues: (value([String: Double].self, .stemVolumes) ?? [:]).compactMap { name, volume in
+                Stem(rawValue: name).map { ($0, volume) }
+            }),
             padVoices: voices,
             highwayLayout: value(HighwayLayout.self, .highwayLayout) ?? .vertical,
             strikeLine: value(StrikeLinePosition.self, .strikeLine) ?? .edge
@@ -146,7 +149,7 @@ public struct PlayerSettings: Codable, Equatable, Sendable {
         try container.encode(earlyWindowMs, forKey: .earlyWindowMs)
         try container.encode(metronomeVolume, forKey: .metronomeVolume)
         try container.encode(missSoundVolume, forKey: .missSoundVolume)
-        try container.encode(stemVolumes, forKey: .stemVolumes)
+        try container.encode(Dictionary(uniqueKeysWithValues: stemVolumes.map { ($0.key.rawValue, $0.value) }), forKey: .stemVolumes)
         try container.encode(
             Dictionary(uniqueKeysWithValues: padVoices.map { (String($0.key), $0.value.rawValue) }),
             forKey: .padVoices

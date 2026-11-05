@@ -16,40 +16,18 @@ enum Demo {
         let app = BeatTrainApp(songs: songs, songRoots: roots, audio: audio)
         let folder = "\(directory)/" + Self.playFolder(layout)
         var canvas = Canvas(width: 320, height: 240)
-        var now = monotonicSeconds()
+        let now = monotonicSeconds()
         app.keeper.set(.highway, to: Double(HighwayLayout.allCases.firstIndex(of: layout) ?? 0), now: now)
         app.keeper.set(.strikeLine, to: Double(StrikeLinePosition.allCases.firstIndex(of: strikeLine) ?? 0), now: now)
-        app.handle(.encoder(delta: 1), now: now)
-        app.handle(.button(.dataPush, pressed: true), now: now)
-        app.handle(.button(.dataPush, pressed: true), now: now)
-        app.tick(now: now)
-        app.tick(now: now)
-        guard case let .playing(play) = app.screen else { return log("no chart started") }
-        let notes = play.session.chart.notes
-        guard let firstNote = notes.first else { return log("no notes") }
-        let start = firstNote.timeSec + 6
-        var next = 0
-        var frame = 0
-        func step() {
-            now += 1 / fps
-            _ = audio.render(frames: Int(44100 / fps))
-            let time = app.playback.chartTime(now: now)
-            while next < notes.count, notes[next].timeSec <= time {
-                if next % 9 != 4 {
-                    let pad = DrumKit.pad(forLayout: app.kit.target(remapping: notes[next].target))
-                    app.handle(.padDown(pad: PanelPads.panelPad(forPad: pad), velocity: 100), now: now)
-                }
-                next += 1
-            }
-            app.tick(now: now)
-        }
+        guard var song = PlayThrough(app: app, audio: audio, song: 1, now: now, misses: { $0 % 9 == 4 }) else { return log("no chart started") }
+        guard let firstNote = song.play?.session.chart.notes.first else { return log("no notes") }
         // Count in and play up to the start without drawing, then draw each frame.
-        now = app.playback.startsAt
-        app.tick(now: now)
-        while app.playback.chartTime(now: now) < start { step() }
+        song.countIn()
+        song.play(until: firstNote.timeSec + 6, step: 1 / fps)
+        var frame = 0
         for _ in 0..<Int(seconds * fps) {
-            step()
-            app.render(into: &canvas, now: now)
+            song.step(1 / fps)
+            app.render(into: &canvas, now: song.now)
             write(canvas, frame: frame, to: folder)
             frame += 1
         }

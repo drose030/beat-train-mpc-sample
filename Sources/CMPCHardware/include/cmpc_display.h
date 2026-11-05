@@ -32,4 +32,17 @@ int cmpc_display_present_strips(cmpc_display *display, const uint32_t *pixels, u
 
 void cmpc_display_close(cmpc_display *display);
 
+/// A rectangle of a frame, from (`x0`, `y0`) to before (`x1`, `y1`).
+typedef struct {
+    uint32_t x0, y0, x1, y1;
+} cmpc_rect;
+
+/// What `cmpc_display_present_strips` sends when `old` is on screen and `now` is
+/// to be: per strip (as there) the smallest rectangle around what changed in it,
+/// strips without changes left out, in sending order. Both frames are
+/// `width`×`height` with row stride `width`. Writes at most `max` rectangles to
+/// `out` and returns how many.
+size_t cmpc_changed_strips(const uint32_t *old, const uint32_t *now, uint32_t width, uint32_t height,
+                           uint32_t strip, int columns, cmpc_rect *out, size_t max);
+
 #endif

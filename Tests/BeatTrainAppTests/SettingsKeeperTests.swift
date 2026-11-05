@@ -28,25 +28,25 @@ struct SettingsKeeperTests {
 
     @Test func shiftedKnobsMoveTheirStemsTogether() {
         let keeper = SettingsKeeper(storage: nil)
-        keeper.set(.stem("vocals"), to: 0.5, now: 0)
+        keeper.set(.stem(.vocals), to: 0.5, now: 0)
         #expect(keeper.turnMix(.k3, to: 100, present: nil, now: 0) == nil, "the first report only tells where it stands")
         #expect(keeper.turnMix(.k3, to: 68, present: nil, now: 0) == .others)  // a quarter turn down
-        #expect(keeper.current.stemVolume("guitar") == 0.75)
-        #expect(keeper.current.stemVolume("vocals") == 0.25, "keeps its distance")
-        #expect(keeper.current.stemVolume("drums") == 1, "not in the group")
+        #expect(keeper.current.stemVolume(.guitar) == 0.75)
+        #expect(keeper.current.stemVolume(.vocals) == 0.25, "keeps its distance")
+        #expect(keeper.current.stemVolume(.drums) == 1, "not in the group")
         #expect(keeper.level(of: .others, present: nil) == 0.75)
     }
 
     @Test func shiftedKnobsLeaveStemsTheSongDoesNotHave() {
         let keeper = SettingsKeeper(storage: nil)
-        let present: Set<String> = ["song", "bass"]
+        let present: Set<Stem> = [.song, .bass]
         keeper.turnMix(.k2, to: 127, present: present, now: 0)
         #expect(keeper.turnMix(.k2, to: 0, present: present, now: 0) == nil, "no drums in this song")
-        #expect(keeper.current.stemVolume("drums") == 1)
+        #expect(keeper.current.stemVolume(.drums) == 1)
         keeper.turnMix(.k3, to: 127, present: present, now: 0)
         keeper.turnMix(.k3, to: 63, present: present, now: 0)   // half a turn down
-        #expect(keeper.current.stemVolume("bass") == 0.5)
-        #expect(keeper.current.stemVolume("guitar") == 1, "only the song's stems move")
+        #expect(keeper.current.stemVolume(.bass) == 0.5)
+        #expect(keeper.current.stemVolume(.guitar) == 1, "only the song's stems move")
     }
 
     @Test func aKnobsFirstReportOnlyTellsWhereItStands() {

@@ -192,10 +192,10 @@ struct SettingsScreenTests {
         let storage = MemorySettings()
         let app = storage.app()
         app.handle(.button(.screen2, pressed: true), now: 0)
-        app.handle(.encoder(delta: SettingsItem.all.firstIndex(of: .stem("vocals"))!), now: 0)
+        app.handle(.encoder(delta: SettingsItem.all.firstIndex(of: .stem(.vocals))!), now: 0)
         app.handle(.button(.dataPush, pressed: true), now: 0)
         app.handle(.encoder(delta: -4), now: 0)
-        #expect(app.settings.stemVolume("vocals") == 0.8)
+        #expect(app.settings.stemVolume(.vocals) == 0.8)
         app.handle(.button(.stop, pressed: true), now: 0.1)
         guard case .settings(_, editing: false, _) = app.screen else {
             Issue.record("STOP should only end editing")
@@ -206,7 +206,7 @@ struct SettingsScreenTests {
             Issue.record("second STOP should return to the song list")
             return
         }
-        #expect(storage.saved?.stemVolume("vocals") == 0.8)
+        #expect(storage.saved?.stemVolume(.vocals) == 0.8)
     }
 
     @Test func k2AndK3TurnMetronomeAndMissSoundByTheirTurn() {
@@ -369,14 +369,11 @@ struct SongEndTests {
     }
 
     /// Song list -> difficulty -> loading -> playing, with the count-in over.
+    /// The test song started and counted in: the music starts. Its start time.
     private func startSong(_ app: BeatTrainApp) -> Double {
-        app.handle(.button(.dataPush, pressed: true), now: 0)
-        app.handle(.button(.screen3, pressed: true), now: 0)   // START
-        app.tick(now: 0)                                         // the loading screen shows
-        app.tick(now: 0)                                         // then the song loads
-        guard case .playing = app.screen else { return 0 }
-        app.tick(now: app.playback.startsAt)                     // count-in over: music starts
-        return app.playback.startsAt
+        guard var song = PlayThrough(app: app, now: 0) else { return 0 }
+        song.countIn()
+        return song.now
     }
 
     private func play(_ app: BeatTrainApp) -> Play? {
@@ -419,25 +416,41 @@ struct SongEndTests {
         let start = startSong(app)
         #expect(app.sweep == .columns, "notes running sideways go out in strips")
         let kick = DrumKit.pad(forLayout: DrumTarget(lane: 0, row: .bottom))
-        #expect(play(app)?.rowPads == [kick], "only the pads the chart uses")
+        #expect(play(app)?.chartPads == [kick], "only the pads the chart uses")
         app.handle(.padDown(pad: PanelPads.panelPad(forPad: kick), velocity: 100), now: start)
-        #expect(play(app)?.padJudge[kick]?.isHit == true)
+        #expect(play(app)?.padFeedback.judgement(ofPad: kick, at: start) == true)
         var canvas = Canvas(width: 320, height: 240)
         app.render(into: &canvas, now: start)
         // One row, centred: its target box lights up green left of the strike line.
-        let top = BeatTrainApp.rowsTop + (BeatTrainApp.rowsBottom - BeatTrainApp.rowsTop - BeatTrainApp.maxRowHeight) / 2
-        let strikeX = BeatTrainApp.strikeX(for: .edge)
+        let top = Highway.rowsTop + (Highway.rowsBottom - Highway.rowsTop - Highway.maxRowHeight) / 2
+        let strikeX = Highway.strikeX(for: .edge)
         #expect(canvas.pixel(x: strikeX - 6, y: top + 10) == Theme.hit)
         #expect(canvas.pixel(x: strikeX, y: top + 1) == Theme.accent)
 
         // In the middle, the note struck a second ago still shows left of the line.
         app.keeper.set(.strikeLine, to: 3, now: start)
-        let middle = BeatTrainApp.strikeX(for: .middle)
+        let middle = Highway.strikeX(for: .middle)
         #expect(middle == 176)
         _ = audio.render(frames: 44100)
         app.render(into: &canvas, now: start + 1)
         #expect(canvas.pixel(x: middle, y: top + 1) == Theme.accent)
-        #expect(canvas.pixel(x: middle - Int(BeatTrainApp.pixelsPerSecond), y: top + 10) == Theme.text, "the struck note, a second on")
+        #expect(canvas.pixel(x: middle - Int(Highway.pixelsPerSecond), y: top + 10) == Theme.text, "the struck note, a second on")
+    }
+
+    @Test func aMissedNoteFlashesRedOnItsPadsRow() throws {
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (app, audio) = try makeApp()
+        app.keeper.set(.highway, to: 2, now: 0)
+        let start = startSong(app)
+        // The kick at 0 s is not struck: once its window has passed it is missed.
+        _ = audio.render(frames: 22050)
+        app.tick(now: start + 0.5)
+        let kick = DrumKit.pad(forLayout: DrumTarget(lane: 0, row: .bottom))
+        #expect(play(app)?.padFeedback.judgement(ofPad: kick, at: start + 0.5) == false)
+        var canvas = Canvas(width: 320, height: 240)
+        app.render(into: &canvas, now: start + 0.5)
+        let top = Highway.rowsTop + (Highway.rowsBottom - Highway.rowsTop - Highway.maxRowHeight) / 2
+        #expect(canvas.pixel(x: Highway.strikeX(for: .edge) - 6, y: top + 10) == Theme.miss)
     }
 
     @Test func verticalHighwayShowsStruckNotesBelowARaisedLine() throws {
@@ -450,7 +463,7 @@ struct SongEndTests {
         _ = audio.render(frames: 22050)
         var canvas = Canvas(width: 320, height: 240)
         app.render(into: &canvas, now: start + 0.5)
-        let middle = BeatTrainApp.strikeY(for: .middle)
+        let middle = Highway.strikeY(for: .middle)
         #expect(middle == 106)
         #expect(canvas.pixel(x: 30, y: middle) == Theme.accent)
         // Half a second on, the struck kick is 62 px below the line, in white (its
@@ -460,7 +473,7 @@ struct SongEndTests {
         // Under lane 1 one map of the panel, with both its pads: the kick (upper
         // panel row) and the snare (lower); below it, the bar naming K1-K3.
         let snare = DrumKit.pad(forLayout: DrumTarget(lane: 0, row: .top))
-        let mapX = (BeatTrainApp.laneWidth - BeatTrainApp.padMapSize.width) / 2, mapY = BeatTrainApp.highwayBottom + 2
+        let mapX = (Highway.laneWidth - BeatTrainApp.padMapSize.width) / 2, mapY = Highway.bottom + 2
         #expect(canvas.pixel(x: mapX + PanelPads.rows[0].firstIndex(of: kick)! * 6 + 2, y: mapY + 2) == DrumVoice.kick.color)
         #expect(canvas.pixel(x: mapX + PanelPads.rows[1].firstIndex(of: snare)! * 6 + 2, y: mapY + 6 + 2) == DrumVoice.red.color)
         #expect(canvas.pixel(x: 3, y: canvas.height - 14) == Theme.accent)
@@ -477,11 +490,11 @@ struct SongEndTests {
         app.render(into: &canvas, now: start)
         #expect(app.sweep == .rows)
         // The kick is the only pad: one lane, the whole highway, judged green.
-        let strikeY = BeatTrainApp.strikeY(for: .edge)
+        let strikeY = Highway.strikeY(for: .edge)
         #expect(canvas.pixel(x: 5, y: strikeY + 5) == Theme.hit)
         #expect(canvas.pixel(x: 100, y: strikeY) == Theme.accent)
-        let mapX = (BeatTrainApp.highwayWidth - BeatTrainApp.padMapSize.width) / 2
-        #expect(canvas.pixel(x: mapX + PanelPads.rows[0].firstIndex(of: kick)! * 6 + 2, y: BeatTrainApp.highwayBottom + 4) == Theme.text, "struck: white")
+        let mapX = (Highway.width - BeatTrainApp.padMapSize.width) / 2
+        #expect(canvas.pixel(x: mapX + PanelPads.rows[0].firstIndex(of: kick)! * 6 + 2, y: Highway.bottom + 4) == Theme.text, "struck: white")
     }
 
     @Test func settingsFromTheSongPauseItAndGoOnAfterACountIn() throws {
@@ -520,7 +533,7 @@ struct SongEndTests {
         let start = startSong(app)
         app.handle(.button(.screen2, pressed: true), now: start)
         app.handle(.button(.stop, pressed: true), now: start + 1)
-        #expect(app.playback.resumesAt == start + 1 + SongPlayback.resumeCountInSec)
+        #expect(app.playback.resumesAt == start + 1 + SongClock.resumeCountInSec)
         app.handle(.button(.play, pressed: true), now: start + 2)
         #expect(!app.playback.isPaused)
         #expect(app.playback.resumesAt == nil)
@@ -536,14 +549,14 @@ struct SongEndTests {
         #expect(app.knobLabels == ["SONG", nil, nil])
         app.handle(.control(.k1, value: 127), now: 1)
         app.handle(.control(.k1, value: 63), now: 1)                 // half a turn down
-        #expect(app.settings.stemVolume("song") == 0.5)
+        #expect(app.settings.stemVolume(.song) == 0.5)
         #expect(app.message?.text == "SONG 50%")
         #expect(app.settings.timingOffsetMs == 0, "not the offset")
         _ = audio
         app.handle(.button(.shift, pressed: false), now: 1)
         app.handle(.control(.k1, value: 74), now: 1)
         #expect(app.settings.timingOffsetMs != 0, "without SHIFT K1 is the offset again, from where it stands")
-        #expect(app.settings.stemVolume("song") == 0.5)
+        #expect(app.settings.stemVolume(.song) == 0.5)
     }
 
     @Test func b1RestartsTheSongFromTheStart() throws {
@@ -559,7 +572,7 @@ struct SongEndTests {
         let again = try #require(play(app))
         #expect(again.session.score == ScoreState())
         #expect(app.playback.chartTime(now: start + 1) < 0, "counting in again")
-        #expect(app.playback.startsAt == start + 1 + SongPlayback.leadInSec)
+        #expect(app.playback.startsAt == start + 1 + SongClock.leadInSec)
         #expect(audio.position == 0)
     }
 
@@ -575,7 +588,7 @@ struct SongEndTests {
         #expect(app.hints.softKeys == ["RETRY", nil, "SONGS"])
         app.handle(.button(.screen1, pressed: true), now: start + 1)
         #expect(app.playback.hasMusic)
-        app.tick(now: start + 1 + SongPlayback.leadInSec)
+        app.tick(now: start + 1 + SongClock.leadInSec)
         _ = audio.render(frames: 4410)
         #expect(audio.position > 0, "the stems play again")
     }

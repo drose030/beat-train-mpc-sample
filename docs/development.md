@@ -13,8 +13,8 @@ panel protocol come from that version). Domain terms are in
 |---|---|
 | `Sources/BeatTrainCore` | Game logic, copied from the original Beat-Train code and since diverged (see ADR-0001; FoundationEssentials on Linux, Foundation on Apple platforms): parsers, TempoMap, DrumKit, hit judging, GameSession, SongLibrary, PlayerSettings |
 | `Sources/MPCHardware` | Display (DRM/KMS, frames sent as changed strips), control surface (rawmidi), audio engine, canvas and 5×7 font |
-| `Sources/CMPCHardware` | C: DRM and rawmidi ioctls, the audio engine (ALSA PCM without alsa-lib, stem mixer, time stretch), decoders: [minimp3](https://github.com/lieff/minimp3) (CC0, in `minimp3/`), [stb_vorbis](https://github.com/nothings/stb) (public domain or MIT, in `stb_vorbis/`), WAV in `decoder.c` |
-| `Sources/beattrain` | The game: screens and input (`BeatTrainApp`, `Screens`), song playback and clock (`SongPlayback`), settings and knobs (`SettingsKeeper`), panel pad numbering and lights (`PanelPads`), start picture, quit and power-off (`Lifecycle`) — see `CONTEXT.md` |
+| `Sources/CMPCHardware` | C: DRM and rawmidi ioctls and which strips of a frame changed (`strips.c`), the audio engine (ALSA PCM without alsa-lib, stem mixer) with its time stretch (`stretch.c`) and heard clock (`heard_clock.c`), decoders: [minimp3](https://github.com/lieff/minimp3) (CC0, in `minimp3/`), [stb_vorbis](https://github.com/nothings/stb) (public domain or MIT, in `stb_vorbis/`), WAV in `decoder.c` |
+| `Sources/beattrain` | The game: screens and input (`BeatTrainApp`, `Screens`), the highway's geometry (`Highway`) and what it shows of strikes (`PadFeedback`), song playback (`SongPlayback`) and its clock (`SongClock`), settings and knobs (`SettingsKeeper`, `RelativeControl`), panel pad numbering and lights (`PanelPads`), start picture, quit and power-off (`Lifecycle`), the scripted play-through of previews, demo and tests (`PlayThrough`) — see `CONTEXT.md` |
 | `Sources/beattrain-hwtest` | Hardware test program |
 | `packaging/autorun` | The SD-card autorun scripts |
 | `packaging/images` | The two splash screens, 320×240 binary PPM (the game reads them without an image decoder) |
@@ -124,8 +124,9 @@ three layouts:
   the speed) sit in a line above it; hits, misses and best streak are on the
   results only.
 
-On all three, struck notes turn white and stay on the highway, missed ones fade,
-and the target of the struck pad flashes green or red.
+On all three, struck notes turn white and stay on the highway, missed ones fade.
+A target flashes green for a hit and red for a strike without a note or a note
+that passed unstruck.
 
 The strike line (settings: STRIKE LINE) sits near the end the notes run to (bottom or
 left, as in the original game), or a quarter, a third or half way along the
@@ -140,7 +141,9 @@ than the panel takes to refresh itself, so it shows part old, part new frame. Se
 row by row, the line between them is horizontal and cuts notes that run sideways in
 two. So only what changed goes out, in strips: bands top to bottom for the vertical
 highways and the menus (`Display.Sweep.rows`), strips left to right for the
-horizontal highway (`.columns`). All highways run at about 45–60 frames per second
+horizontal highway (`.columns`). Which parts changed is worked out apart from the
+sending (`strips.c`, `Display.changedStrips`), so the tests check it off the
+device. All highways run at about 45–60 frames per second
 on the device. During a song the log notes, every 10 s, the frame rate and the
 audio's underruns and mixing time per period.
 

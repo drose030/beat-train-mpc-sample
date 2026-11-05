@@ -10,10 +10,10 @@ enum SettingsItem: Equatable {
     case missSound
     case highway
     case strikeLine
-    case stem(String)
+    case stem(Stem)
 
     static let all: [SettingsItem] = [.timingOffset, .hitWindow, .earlyWindow, .metronome, .missSound, .highway, .strikeLine]
-        + SongPlayback.stemNames.map { .stem($0) }
+        + Stem.allCases.map { .stem($0) }
 
     var title: String {
         switch self {
@@ -24,7 +24,7 @@ enum SettingsItem: Equatable {
         case .missSound: "MISS SOUND"
         case .highway: "HIGHWAY"
         case .strikeLine: "  STRIKE LINE"
-        case let .stem(name): "STEM \(name.uppercased())"
+        case let .stem(stem): "STEM \(stem.rawValue.uppercased())"
         }
     }
 
@@ -74,7 +74,7 @@ enum SettingsItem: Equatable {
         case .missSound: settings.missSoundVolume
         case .highway: Double(HighwayLayout.allCases.firstIndex(of: settings.highwayLayout) ?? 0)
         case .strikeLine: Double(StrikeLinePosition.allCases.firstIndex(of: settings.strikeLine) ?? 0)
-        case let .stem(name): settings.stemVolume(name)
+        case let .stem(stem): settings.stemVolume(stem)
         }
     }
 
@@ -93,7 +93,7 @@ enum SettingsItem: Equatable {
         case .strikeLine:
             let positions = StrikeLinePosition.allCases
             settings.strikeLine = positions[min(max(Int(rounded), 0), positions.count - 1)]
-        case let .stem(name): settings.stemVolumes[name] = rounded
+        case let .stem(stem): settings.stemVolumes[stem] = rounded
         }
     }
 

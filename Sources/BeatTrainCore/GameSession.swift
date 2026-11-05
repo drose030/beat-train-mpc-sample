@@ -8,7 +8,8 @@ import Foundation
 /// strikes and by time. The judging, scoring and feedback rules as one value
 /// type the MPC app (or a test) drives.
 ///
-/// Times are chart times in seconds (see `chartTime(audioTime:chartDelayMs:timing:)`).
+/// Times are chart times in seconds: the song's time shifted by its chart delay and
+/// the player's timing offset (the MPC app's `SongClock` computes them).
 public struct GameSession: Sendable {
     public let chart: DrumChart
     public let kit: DrumKit
@@ -25,13 +26,6 @@ public struct GameSession: Sendable {
         self.kit = kit
         self.timing = timing
         noteStates = Dictionary(uniqueKeysWithValues: chart.notes.indices.map { ($0, .pending) })
-    }
-
-    /// The chart time for an audio clock reading, as the original game computes it: the
-    /// song's chart delay and the player's timing offset shift the chart against
-    /// the audio. Never negative.
-    public static func chartTime(audioTime: Double, chartDelayMs: Double, timing: TimingConfiguration) -> Double {
-        max(0, audioTime - chartDelayMs / 1000 - timing.timingOffsetSec)
     }
 
     public func state(ofNote index: Int) -> NoteJudgmentState {
@@ -68,7 +62,7 @@ public struct GameSession: Sendable {
         case .overhit:
             score.registerOverhit()
         }
-        return GameplayFeedbackDirector.feedback(for: judgement, lane: target.lane)
+        return GameplayFeedbackDirector.feedback(for: judgement, target: target)
     }
 
     /// Marks the notes whose window has passed at `time` as missed.
@@ -84,7 +78,7 @@ public struct GameSession: Sendable {
             noteStates[index] = .missed
         }
         score.registerMisses(missed.count)
-        return GameplayFeedbackDirector.feedbackForAutoMisses(lanes: missed.map { target(ofNote: $0).lane })
+        return GameplayFeedbackDirector.feedbackForAutoMisses(targets: missed.map { target(ofNote: $0) })
     }
 
     /// True once every note is judged and the outro has passed.

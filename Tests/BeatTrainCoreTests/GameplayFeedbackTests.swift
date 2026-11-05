@@ -4,26 +4,26 @@ import Testing
 struct GameplayFeedbackTests {
 
     @Test func hitUnmutesDrumsAndFlashesGreen() {
-        let feedback = GameplayFeedbackDirector.feedback(for: .hit(noteIndex: 3), lane: 2)
-        #expect(feedback == [.flashLane(lane: 2, isHit: true), .setDrumsMuted(false)])
+        let feedback = GameplayFeedbackDirector.feedback(for: .hit(noteIndex: 3), target: DrumTarget(lane: 2, row: .top))
+        #expect(feedback == [.flashTarget(DrumTarget(lane: 2, row: .top), isHit: true), .setDrumsMuted(false)])
     }
 
     @Test func overhitMutesDrumsPlaysSFXAndFlashesRed() {
-        let feedback = GameplayFeedbackDirector.feedback(for: .overhit, lane: 1)
-        #expect(feedback == [.flashLane(lane: 1, isHit: false), .setDrumsMuted(true), .playMissSFX])
+        let feedback = GameplayFeedbackDirector.feedback(for: .overhit, target: DrumTarget(lane: 1, row: .bottom))
+        #expect(feedback == [.flashTarget(DrumTarget(lane: 1, row: .bottom), isHit: false), .setDrumsMuted(true), .playMissSFX])
     }
 
-    @Test func autoMissesFlashEachLaneThenMuteAndSFX() {
-        let feedback = GameplayFeedbackDirector.feedbackForAutoMisses(lanes: [0, 3])
+    @Test func autoMissesFlashEachTargetThenMuteAndSFX() {
+        let feedback = GameplayFeedbackDirector.feedbackForAutoMisses(targets: [DrumTarget(lane: 0, row: .bottom), DrumTarget(lane: 3, row: .top)])
         #expect(feedback == [
-            .flashLane(lane: 0, isHit: false),
-            .flashLane(lane: 3, isHit: false),
+            .flashTarget(DrumTarget(lane: 0, row: .bottom), isHit: false),
+            .flashTarget(DrumTarget(lane: 3, row: .top), isHit: false),
             .setDrumsMuted(true),
             .playMissSFX,
         ])
     }
 
     @Test func noAutoMissesProducesNoFeedback() {
-        #expect(GameplayFeedbackDirector.feedbackForAutoMisses(lanes: []).isEmpty)
+        #expect(GameplayFeedbackDirector.feedbackForAutoMisses(targets: []).isEmpty)
     }
 }

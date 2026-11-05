@@ -13,20 +13,16 @@ import Darwin
 #endif
 import MPCHardware
 
-/// One run of a chart on screen: the session and the flashes the highway draws.
+/// One run of a chart on screen: the session and what the highway shows of the strikes.
 /// Its music and clock are the app's `SongPlayback`.
 struct Play {
     let song: SongMetadata
     let difficulty: DrumDifficulty
     var session: GameSession
     let beatTimes: [Double]
-    /// The pads the horizontal highway shows, top row first.
-    let rowPads: [Int]
-    var laneFlash: [(until: Double, color: Color)?] = Array(repeating: nil, count: 4)
-    var judgeFlash: [(until: Double, isHit: Bool)?] = Array(repeating: nil, count: 4)
-    var padFlashUntil = [Double](repeating: 0, count: DrumKit.padCount)
-    /// A strike's judgement on its pad, for the horizontal highway.
-    var padJudge: [(until: Double, isHit: Bool)?] = Array(repeating: nil, count: DrumKit.padCount)
+    /// The pads the chart's notes fall on (`Highway.chartPads(of:kit:)`).
+    let chartPads: [Int]
+    var padFeedback = PadFeedback()
 }
 
 enum Screen {
@@ -62,9 +58,8 @@ final class BeatTrainApp {
     var shiftHeld = false
     private(set) var lifecycle = Lifecycle.running
     var message: (text: String, until: Double)?
-    /// The fader's last report, and the speed it has turned to while SHIFT is held.
-    private var faderLast: UInt8?
-    private var faderSpeed: Double?
+    /// The fader: the song speed with SHIFT held.
+    private var fader = RelativeControl()
     /// The start picture, over everything until it is over.
     var splash: Splash?
 
@@ -119,22 +114,14 @@ final class BeatTrainApp {
         lifecycle = powerOff ? .poweringOff : .quitting
     }
 
-    /// The power key: ask before shutting down, as the stock app does. A song
-    /// pauses meanwhile.
     /// SHIFT+FADER sets the song speed by how far the fader moves (its whole travel
-    /// is the whole range), so a fader left anywhere does not make it jump. Without
-    /// SHIFT the fader does nothing, so it cannot be changed by accident.
+    /// is the whole range). Without SHIFT the fader does nothing, so it cannot be
+    /// changed by accident.
     private func moveFader(to value: UInt8, now: Double) {
-        defer { faderLast = value }
-        guard shiftHeld, let last = faderLast else {
-            faderSpeed = nil
-            return
-        }
-        let range = SongPlayback.speedRange
-        var speed = faderSpeed ?? playback.speed
-        speed += Double(Int(value) - Int(last)) / 127 * (range.upperBound - range.lowerBound)
-        speed = min(max(speed, range.lowerBound), range.upperBound)
-        faderSpeed = speed
+        guard shiftHeld else { return fader.follow(to: value) }
+        let range = SongClock.speedRange
+        guard let speed = fader.move(to: value, from: playback.speed, step: SongClock.speedStep,
+                                     travel: range.upperBound - range.lowerBound, range: range) else { return }
         playback.setSpeed(speed, now: now)
         message = ("SPEED \(Self.percent(playback.speed))", now + 1.5)
     }
@@ -144,6 +131,8 @@ final class BeatTrainApp {
         "\(Int((value * 100).rounded()))%"
     }
 
+    /// The power key: ask before shutting down, as the stock app does. A song
+    /// pauses meanwhile.
     func powerButtonPressed(now: Double) {
         guard lifecycle == .running else { return }
         lifecycle = .askingToShutDown
@@ -388,7 +377,7 @@ final class BeatTrainApp {
     private func newPlay(song: SongMetadata, difficulty: DrumDifficulty, chart: DrumChart) -> Play {
         let session = GameSession(chart: chart, kit: kit, timing: timing)
         return Play(song: song, difficulty: difficulty, session: session, beatTimes: chart.beatTimesSec(),
-                    rowPads: Self.horizontalRows(for: session, kit: kit))
+                    chartPads: Highway.chartPads(of: session, kit: kit))
     }
 
     /// Shows the results. The stems stay loaded for a retry until the results close.
@@ -401,19 +390,13 @@ final class BeatTrainApp {
     private func strike(_ pad: Int, now: Double) {
         switch screen {
         case var .playing(play):
-            play.padFlashUntil[pad] = now + 0.12
+            guard kit.voice(forPad: pad) != .off else { return }
+            play.padFeedback.strike(pad: pad, at: now)
             defer { screen = .playing(play) }
             let time = playback.chartTime(now: now)
             // Warm-up strikes during the count-in and while paused are not judged.
             guard time >= 0, !playback.isPaused else { return }
-            if let lane = kit.lane(forPad: pad) {
-                play.laneFlash[lane] = (now + 0.1, kit.voice(forPad: pad).color)
-            }
-            let feedback = play.session.strike(pad: pad, at: time)
-            for case let .flashLane(_, isHit) in feedback {
-                play.padJudge[pad] = (now + 0.15, isHit)
-            }
-            apply(feedback, to: &play, now: now)
+            apply(play.session.strike(pad: pad, at: time), to: &play, now: now)
         case .padSetup:
             screen = .padSetup(selected: pad, flashUntil: now + 0.15)
         default:
@@ -440,8 +423,8 @@ final class BeatTrainApp {
 
     private func apply(_ feedback: [GameplayFeedback], to play: inout Play, now: Double) {
         for action in feedback {
-            if case let .flashLane(lane, isHit) = action, (0..<4).contains(lane) {
-                play.judgeFlash[lane] = (now + 0.15, isHit)
+            if case let .flashTarget(target, isHit) = action {
+                play.padFeedback.judge(target, isHit: isHit, at: now)
             }
             playback.react(to: action)
         }
@@ -484,7 +467,7 @@ final class BeatTrainApp {
             let voice = kit.voice(forPad: pad)
             guard voice != .off else { return .black }
             switch screen {
-            case let .playing(play) where play.padFlashUntil[pad] > now:
+            case let .playing(play) where play.padFeedback.isStruck(pad: pad, at: now):
                 return voice.color
             case let .padSetup(selected, flashUntil) where pad == selected:
                 return flashUntil > now ? .white : voice.color

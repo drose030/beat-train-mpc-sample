@@ -64,24 +64,32 @@ struct PlayerSettingsTests {
         settings.earlyWindowMs = 70
         settings.metronomeVolume = 0.6
         settings.missSoundVolume = 0
-        settings.stemVolumes["vocals"] = 0.3
+        settings.stemVolumes[.vocals] = 0.3
         try settings.save(to: url)
         let loaded = PlayerSettings.load(from: url)
         #expect(loaded == settings)
         #expect(loaded.timing.hitWindowTotalSec == 0.15)
         #expect(abs(loaded.timing.hitWindowBackSec - 0.08) < 1e-9)
-        #expect(loaded.stemVolume("vocals") == 0.3)
-        #expect(loaded.stemVolume("drums") == 1)
+        #expect(loaded.stemVolume(.vocals) == 0.3)
+        #expect(loaded.stemVolume(.drums) == 1)
+    }
+
+    @Test func stemVolumesAreKeptByName() throws {
+        let json = #"{"stemVolumes": {"vocals": 0.4, "harmonica": 0.2}}"#
+        let settings = try JSONDecoder().decode(PlayerSettings.self, from: Data(json.utf8))
+        #expect(settings.stemVolumes == [.vocals: 0.4], "an unknown stem is dropped")
+        let saved = try JSONSerialization.jsonObject(with: JSONEncoder().encode(settings)) as? [String: Any]
+        #expect(saved?["stemVolumes"] as? [String: Double] == ["vocals": 0.4])
     }
 
     @Test func changesAreClamped() {
         var settings = PlayerSettings()
         settings.metronomeVolume = 3
-        settings.stemVolumes["bass"] = -1
+        settings.stemVolumes[.bass] = -1
         settings.hitWindowMs = 1000
         settings.earlyWindowMs = 1000
         #expect(settings.metronomeVolume == 1)
-        #expect(settings.stemVolume("bass") == 0)
+        #expect(settings.stemVolume(.bass) == 0)
         #expect(settings.hitWindowMs == TimingConfiguration.maxTotalSec * 1000)
         #expect(abs(settings.earlyWindowMs - (settings.hitWindowMs - TimingConfiguration.minSegmentSec * 1000)) < 1e-9)
         settings.hitWindowMs = 60
