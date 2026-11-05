@@ -17,18 +17,6 @@ public enum DrumDifficulty: String, CaseIterable, Codable, Hashable, Identifiabl
 
     public var id: String { rawValue }
 
-    // Localized UI labels on Apple platforms; Foundation on Linux has no String(localized:).
-    #if canImport(Darwin)
-    public var displayName: String {
-        switch self {
-        case .easy: return String(localized: "Easy")
-        case .medium: return String(localized: "Medium")
-        case .hard: return String(localized: "Hard")
-        case .expert: return String(localized: "Expert")
-        }
-    }
-    #endif
-
     public var midiBaseNote: UInt8 {
         switch self {
         case .easy: return 60
@@ -74,7 +62,7 @@ public struct DrumChart: Equatable, Sendable {
 extension DrumChart {
     /// Quarter-note beat times (seconds) across the chart, delegated to the
     /// `TempoMap`. Spans tick 0 through the last note's tick; empty when the chart
-    /// has no notes (caller can fall back to a fixed-interval grid).
+    /// has no notes.
     public func beatTimesSec() -> [Double] {
         guard let maxTick = notes.map(\.tick).max() else { return [] }
         return tempoMap.beatTimes(throughTick: maxTick)

@@ -19,7 +19,6 @@ struct SongClock {
     private var timer: (base: Double, at: Double)?
     private var begun = false
 
-    /// The count-in is over and the music has started.
     private(set) var musicStarted = false
     /// Song seconds per second, in `speedRange`.
     private(set) var speed = 1.0

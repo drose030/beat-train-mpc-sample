@@ -59,9 +59,7 @@ final class SongPlayback {
     /// Song seconds per second, in `SongClock.speedRange`. Stays for the next
     /// songs; not saved.
     var speed: Double { clock.speed }
-    /// Monotonic time at which the count-in ends and the music starts.
     var startsAt: Double { clock.startsAt }
-    /// Counting in to go on after a pause: when the song goes on.
     var resumesAt: Double? { clock.resumesAt }
 
     /// `missSound`: the bytes of an MP3, Ogg Vorbis or WAV file.
@@ -147,8 +145,6 @@ final class SongPlayback {
         if clock.resume(now: now) { audio?.play() }
     }
 
-    /// Goes on after a count-in of `SongClock.resumeCountInSec`, paused until
-    /// then; at once while the song's own count-in still runs.
     func resumeAfterCountIn(now: Double) {
         clock.resumeAfterCountIn(now: now)
     }
@@ -157,7 +153,6 @@ final class SongPlayback {
         clock.isPaused
     }
 
-    /// Counting in or playing, not paused.
     var isRunning: Bool {
         clock.isRunning
     }

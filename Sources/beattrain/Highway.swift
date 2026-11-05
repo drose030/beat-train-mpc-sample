@@ -81,12 +81,10 @@ struct Highway {
         }
     }
 
-    /// Where lane `lane` starts across.
     func laneOrigin(_ lane: Int) -> Int {
         laneStart + lane * laneSize
     }
 
-    /// The size across of all lanes together.
     var lanesSize: Int {
         laneSize * lanes.count
     }

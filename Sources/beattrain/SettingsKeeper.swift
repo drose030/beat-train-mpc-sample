@@ -58,7 +58,6 @@ final class SettingsKeeper {
     static let mixKnobs: [(control: PanelControl, group: StemGroup)] = [
         (.k1, .song), (.k2, .drums), (.k3, .others),
     ]
-    /// How long after the last change the settings are saved.
     static let saveDelaySec = 2.0
 
     /// "K1" for the setting K1 turns.

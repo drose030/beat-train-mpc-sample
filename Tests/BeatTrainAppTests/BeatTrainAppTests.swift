@@ -368,7 +368,6 @@ struct SongEndTests {
         return Array(bytes[second...])
     }
 
-    /// Song list -> difficulty -> loading -> playing, with the count-in over.
     /// The test song started and counted in: the music starts. Its start time.
     private func startSong(_ app: BeatTrainApp) -> Double {
         guard var song = PlayThrough(app: app, now: 0) else { return 0 }
