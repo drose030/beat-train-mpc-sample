@@ -51,7 +51,7 @@ struct ControlHints: Equatable {
 /// is optional, so it runs the same on the device and in previews.
 final class BeatTrainApp {
     /// The release, on the start picture and in the log. Raised with each release.
-    static let version = "1.5"
+    static let version = "1.6"
 
     let songs: [SongMetadata]
     let songRoots: [String]
@@ -65,6 +65,10 @@ final class BeatTrainApp {
     private var fader = RelativeControl()
     /// The start picture, over everything until it is over.
     var splash: Splash?
+    /// How long a frame takes to reach the panel: the running highway is drawn this
+    /// far ahead, so its notes reach the line on screen when they are heard. Measured
+    /// on the device; 0 off it.
+    var displayLeadSec = 0.0
 
     let keeper: SettingsKeeper
 

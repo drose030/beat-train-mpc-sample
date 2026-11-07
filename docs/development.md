@@ -102,7 +102,9 @@ settings or pad setup, 2 s after the last change, and on every way out.
 
 The game clock is the audio actually heard (the device's buffer delay is taken
 out), also for songs without stems, so the timing offset starts at 0; turn K1 if
-hits feel early or late. The metronome clicks on the song's beats (the chart's beat
+hits feel early or late. It shifts the judging and the highway together against
+the music, not the music, the pad sounds or the clicks; the highway's own lag is
+made up apart (see [Display](#display)). The metronome clicks on the song's beats (the chart's beat
 grid), placed to the sample by the audio thread. After the last note the music
 plays on to its end ("SONG END" on the highway), then the results come; STOP shows
 them at once.
@@ -153,7 +155,10 @@ than the panel takes to refresh itself, so it shows part old, part new frame. Se
 row by row, the line between them is horizontal and cuts notes that run sideways in
 two. So only what changed goes out, in strips: bands top to bottom for the vertical
 highways and the menus (`Display.Sweep.rows`), strips left to right for the
-horizontal highway (`.columns`). Which parts changed is worked out apart from the
+horizontal highway (`.columns`). What the panel shows is therefore always a
+little old, so the running highway is drawn ahead by the time recent frames took
+to reach it (measured, about 15–25 ms; in the log as "drawn … ms ahead"); the
+timing offset cannot do this, as it moves the picture with the judging. Which parts changed is worked out apart from the
 sending (`strips.c`, `Display.changedStrips`), so the tests check it off the
 device. All highways run at about 45–60 frames per second
 on the device. During a song the log notes, every 10 s, the frame rate and the

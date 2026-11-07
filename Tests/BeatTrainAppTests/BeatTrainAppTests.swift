@@ -478,6 +478,23 @@ struct SongEndTests {
         #expect(canvas.pixel(x: 3, y: canvas.height - 14) == Theme.accent)
     }
 
+    @Test func theRunningHighwayIsDrawnAheadByTheFrameTime() throws {
+        defer { try? FileManager.default.removeItem(at: root) }
+        let (app, audio) = try makeApp()
+        app.keeper.set(.strikeLine, to: 3, now: 0)
+        let start = startSong(app)
+        let kick = DrumKit.pad(forLayout: DrumTarget(lane: 0, row: .bottom))
+        app.handle(.padDown(pad: PanelPads.panelPad(forPad: kick), velocity: 100), now: start)
+        _ = audio.render(frames: 22050)
+        var canvas = Canvas(width: 320, height: 240)
+        app.displayLeadSec = 0.08
+        app.render(into: &canvas, now: start + 0.5)
+        // The struck kick, 0.58 s past the line instead of 0.5: 10 px further down.
+        let middle = Highway.strikeY(for: .middle)
+        #expect(canvas.pixel(x: 10, y: middle + 72 - 5) == Theme.text)
+        #expect(canvas.pixel(x: 10, y: middle + 62 - 5) != Theme.text, "not where it was")
+    }
+
     @Test func byPadHighwayGivesTheChartsPadsALaneEach() throws {
         defer { try? FileManager.default.removeItem(at: root) }
         let (app, _) = try makeApp()

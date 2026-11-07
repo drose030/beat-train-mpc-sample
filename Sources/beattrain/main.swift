@@ -223,13 +223,15 @@ while stopRequested == 0 && !app.lifecycle.isOver {
     }
     if case .playing = app.screen {
         let took = monotonicSeconds() - now
+        // The next frames are drawn ahead by about as long as these took.
+        app.displayLeadSec = min(max(app.displayLeadSec + (took - app.displayLeadSec) * 0.1, 0), 0.06)
         frameStats.frames += 1
         frameStats.total += took
         frameStats.longest = max(frameStats.longest, took)
         let elapsed = monotonicSeconds() - frameStats.since
         if elapsed >= 10 {
             let fps = Double(frameStats.frames) / elapsed
-            log("display \(sweep): \(Int(fps.rounded())) fps, frame \(Int((frameStats.total / Double(frameStats.frames) * 1000).rounded())) ms on average, \(Int((frameStats.longest * 1000).rounded())) ms at most")
+            log("display \(sweep): \(Int(fps.rounded())) fps, frame \(Int((frameStats.total / Double(frameStats.frames) * 1000).rounded())) ms on average, \(Int((frameStats.longest * 1000).rounded())) ms at most, drawn \(Int((app.displayLeadSec * 1000).rounded())) ms ahead")
             if let audio {
                 // Mixing a period must stay well below its length (see the setup
                 // logged at start); the delay is how long a pad sound waits.

@@ -151,7 +151,7 @@ extension BeatTrainApp {
     // MARK: - Play
 
     private func drawPlay(_ play: Play, now: Double, into canvas: inout Canvas) {
-        let time = playback.chartTime(now: now)
+        let time = playback.chartTime(now: now) + (playback.isRunning ? displayLeadSec * playback.speed : 0)
         let highway = Highway(layout: settings.highwayLayout, strikeLine: settings.strikeLine, chartPads: play.chartPads, kit: kit, screenWidth: canvas.width)
         let centerX: Int
         switch settings.highwayLayout {
