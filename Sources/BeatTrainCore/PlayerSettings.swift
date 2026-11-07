@@ -64,6 +64,11 @@ public struct PlayerSettings: Codable, Equatable, Sendable {
     public var padVoices: [Int: DrumVoice]
     public var highwayLayout: HighwayLayout
     public var strikeLine: StrikeLinePosition
+    /// Volume of the song's own drum sounds (its `sounds/` folder) on the pads, 0–1;
+    /// 0 is off. Songs without them are not affected.
+    public var padSoundsVolume: Double {
+        didSet { padSoundsVolume = Self.clampVolume(padSoundsVolume) }
+    }
 
     public static let defaultHitWindowMs = 120.0
     public static let defaultEarlyWindowMs = 50.0
@@ -78,7 +83,8 @@ public struct PlayerSettings: Codable, Equatable, Sendable {
         stemVolumes: [Stem: Double] = [:],
         padVoices: [Int: DrumVoice] = DrumKit.defaultPadVoices,
         highwayLayout: HighwayLayout = .vertical,
-        strikeLine: StrikeLinePosition = .edge
+        strikeLine: StrikeLinePosition = .edge,
+        padSoundsVolume: Double = 0
     ) {
         // Through the same clamps as later changes (didSet does not run in init).
         let timing = TimingConfiguration(totalSec: hitWindowMs / 1000, frontSec: earlyWindowMs / 1000, offsetMs: timingOffsetMs)
@@ -91,6 +97,7 @@ public struct PlayerSettings: Codable, Equatable, Sendable {
         self.padVoices = padVoices
         self.highwayLayout = highwayLayout
         self.strikeLine = strikeLine
+        self.padSoundsVolume = Self.clampVolume(padSoundsVolume)
     }
 
     public var kit: DrumKit {
@@ -110,7 +117,7 @@ public struct PlayerSettings: Codable, Equatable, Sendable {
     }
 
     private enum CodingKeys: String, CodingKey {
-        case timingOffsetMs, hitWindowMs, earlyWindowMs, metronomeVolume, missSoundVolume, stemVolumes, padVoices, highwayLayout, strikeLine
+        case timingOffsetMs, hitWindowMs, earlyWindowMs, metronomeVolume, missSoundVolume, stemVolumes, padVoices, highwayLayout, strikeLine, padSoundsVolume
     }
 
     public init(from decoder: Decoder) throws {
@@ -138,7 +145,8 @@ public struct PlayerSettings: Codable, Equatable, Sendable {
             }),
             padVoices: voices,
             highwayLayout: value(HighwayLayout.self, .highwayLayout) ?? .vertical,
-            strikeLine: value(StrikeLinePosition.self, .strikeLine) ?? .edge
+            strikeLine: value(StrikeLinePosition.self, .strikeLine) ?? .edge,
+            padSoundsVolume: value(Double.self, .padSoundsVolume) ?? 0
         )
     }
 
@@ -156,6 +164,7 @@ public struct PlayerSettings: Codable, Equatable, Sendable {
         )
         try container.encode(highwayLayout, forKey: .highwayLayout)
         try container.encode(strikeLine, forKey: .strikeLine)
+        try container.encode(padSoundsVolume, forKey: .padSoundsVolume)
     }
 
     /// The settings in `url`, or the defaults.

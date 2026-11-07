@@ -36,6 +36,10 @@ final class SongPlayback {
 
     private static let missSlot = 0
     private static let clickSlot = 1
+    /// The pad sounds' slots, one per voice after the two above.
+    private static let padVoices: [DrumVoice] = [.kick, .red, .yellow, .blue, .orange, .green]
+    /// Where a song keeps its pad sounds: one file per voice, `kick.wav`, `red.wav`…
+    static let padSoundsFolder = "sounds"
 
     /// The original game's metronome click: 30 ms of 1 kHz sine with a fast decay.
     static func clickSamples(rate: Double) -> [Float] {
@@ -50,6 +54,8 @@ final class SongPlayback {
     private var song: SongMetadata?
     private var beatTimes: [Double] = []
     private var stemIndices: [Stem: Int] = [:]
+    /// The voices the loaded song has a pad sound for.
+    private var padSounds: Set<DrumVoice> = []
     private var drumsMuted = false
     private var nextBeat = 0
     private var clock: SongClock
@@ -87,25 +93,37 @@ final class SongPlayback {
         self.beatTimes = beatTimes
         guard let audio else { return false }
         for stem in Stem.allCases {
-            for type in Self.stemExtensions {
-                let url = song.songFolderURL.appendingPathComponent("\(stem.rawValue).\(type)")
-                guard let data = try? Data(contentsOf: url) else { continue }
-                do {
-                    stemIndices[stem] = try audio.addStem(encoded: [UInt8](data))
-                } catch {
-                    log("stem \(url.lastPathComponent): \(error)")
-                }
-                break
+            guard let data = Self.firstFile(stem.rawValue, in: song.songFolderURL) else { continue }
+            do {
+                stemIndices[stem] = try audio.addStem(encoded: data)
+            } catch {
+                log("stem \(stem.rawValue): \(error)")
+            }
+        }
+        for (index, voice) in Self.padVoices.enumerated() {
+            guard let data = Self.firstFile(voice.rawValue, in: song.songFolderURL.appendingPathComponent(Self.padSoundsFolder)) else { continue }
+            do {
+                try audio.loadEffect(slot: 2 + index, encoded: data)
+                padSounds.insert(voice)
+            } catch {
+                log("pad sound \(voice.rawValue): \(error)")
             }
         }
         applyGains()
         log("stems: \(Stem.allCases.filter { stemIndices[$0] != nil }.map(\.rawValue)) for \(song.title), \((audio.duration * 10).rounded() / 10) s")
+        if !padSounds.isEmpty { log("pad sounds: \(Self.padVoices.filter(padSounds.contains).map(\.rawValue))") }
         return hasMusic
+    }
+
+    /// The bytes of `name` in `folder`, from the first of `stemExtensions` there.
+    private static func firstFile(_ name: String, in folder: URL) -> [UInt8]? {
+        stemExtensions.lazy.compactMap { try? Data(contentsOf: folder.appendingPathComponent("\(name).\($0)")) }.first.map { [UInt8]($0) }
     }
 
     func unload() {
         audio?.clearStems()
         stemIndices = [:]
+        padSounds = []
         song = nil
         beatTimes = []
         drumsMuted = false
@@ -120,6 +138,18 @@ final class SongPlayback {
     /// The loaded song has stems playing in the engine.
     var hasMusic: Bool {
         !stemIndices.isEmpty
+    }
+
+    /// The pads play the song's drum sounds: the song has some, and
+    /// `PlayerSettings.padSoundsVolume` is up.
+    var playsPadSounds: Bool {
+        settings.padSoundsVolume > 0 && !padSounds.isEmpty
+    }
+
+    /// A strike on a pad of `voice`: its sound, when the pads play the song's.
+    func strike(_ voice: DrumVoice) {
+        guard playsPadSounds, padSounds.contains(voice), let index = Self.padVoices.firstIndex(of: voice) else { return }
+        audio?.triggerEffect(slot: 2 + index)
     }
 
     /// Starts the loaded song from its beginning, after a count-in from `now`.
@@ -239,6 +269,9 @@ final class SongPlayback {
         for (stem, index) in stemIndices {
             let muted = stem == .drums && drumsMuted
             audio.setGain(Float(settings.stemVolume(stem)) * (muted ? Self.mutedDrumsGain : 1), forStem: index)
+        }
+        for index in Self.padVoices.indices {
+            audio.setEffectGain(Float(settings.padSoundsVolume), slot: 2 + index)
         }
     }
 }

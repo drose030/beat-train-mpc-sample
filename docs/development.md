@@ -69,8 +69,17 @@ all the others together, each keeping its distance to the rest (a whole turn is
 has no stems of, and those knobs do nothing; without a song all three show.
 
 **Settings** (B2 in the song list): timing offset, hit window and its early part
-(the original game's settings), metronome and miss sound volume, the highway layout
-and its strike line, and a volume per stem. The list scrolls when it is longer than
+(the original game's settings), metronome and miss sound volume, pad sounds, the
+highway layout and its strike line, and a volume per stem.
+
+**Pad sounds**: a song's `sounds/kick.wav`, `red.wav`… (named after the pad
+voices; `.ogg` and `.mp3` too) are loaded with it as effects, one slot per voice.
+With PAD SOUNDS above OFF, a strike plays its pad voice's sound from the start at
+that level, at once (also in the count-in and paused, unjudged); a voice without a
+file stays silent. The drum stem keeps its own level (SHIFT+K2), so the player
+chooses between pads only and a mix. A change of a stem's level reaches the ear
+after up to two stretch hops (46 ms), as the stems are mixed ahead for the time
+stretch; a pad sound does not wait for that. The list scrolls when it is longer than
 the screen. Turn the encoder to pick a line, push to edit it, turn to change it,
 push or STOP when done; ERASE or B1 puts the line back to its default; STOP or B3
 returns and saves. B2 opens them over a running song too: the song pauses, and
@@ -188,8 +197,11 @@ app exits with code 10; `session.sh` copies the log to the card and runs
 The stock app switches the Control Surface rawmidi to timestamped framing, and
 that setting survives its exit; `ControlSurface` sets plain byte mode on open.
 
-Audio opens the PCM the stock app uses (`/dev/snd/by-path/platform-sound`) with
-its setup, 4 channels S32_LE 44.1 kHz (outputs 1-2 and 3-4 get the same mix). A
+Audio opens the PCM the stock app uses (`/dev/snd/by-path/platform-sound`) as
+S32_LE 44.1 kHz, with 4 channels where it can (the lab; outputs 1-2 and 3-4 get
+the same mix), else 2 (the MPC Sample), and with periods of 128 frames instead of
+the stock app's 512 (then 256, then 512, if the device refuses): four periods are
+queued, so a pad sound comes out about 12 ms after the strike instead of 46. The log notes the measured wait every 10 s during a song. A
 real-time thread decodes the stems from memory, resamples them to 44.1 kHz and
 mixes them; MAIN VOLUME is applied in software, as by the stock app. The
 resampler is a 32-tap windowed sinc (Kaiser) with its cutoff at the lower of
@@ -201,7 +213,7 @@ named in several formats is taken as `.mp3`, then `.ogg`, then `.wav`. WAV:
 two channels only the first two play. The whole file stays in RAM.
 In the lab, a 6-stem 48 kHz song: MP3 ~2 % CPU and 55 MB RAM, Ogg Vorbis
 ~2.4 % of one core and 117 MB RAM (the Ogg files are twice the size). On the
-device, mixing a period (11.6 ms) takes about 0.2 ms, also at half speed.
+device, mixing 512 frames (11.6 ms) took about 0.2 ms, also at half speed.
 
 ## Sources
 

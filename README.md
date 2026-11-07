@@ -73,8 +73,13 @@ show which pad to hit. **Strike line** moves the line you hit on away from the e
 a quarter, a third or half way in, so you see more of the notes you have just played.
 
 **Settings** (B2 in the song list): timing offset, hit window, metronome, miss
-sound, highway direction, strike line, and a volume for each part of the song
-(drums, bass, vocals…). B2 opens them during a song too: the song pauses, and DONE
+sound, pad sounds, highway direction, strike line, and a volume for each part of
+the song (drums, bass, vocals…).
+
+**Pad sounds**: when a song brings its own drum sounds (see [Songs](#songs)), each
+pad plays its drum's sound at the volume set here (OFF by default), so you hear
+what you play. The song's own drums keep their volume on SHIFT + K2: turn them all
+the way down to hear only your playing, or keep some of them under it. B2 opens them during a song too: the song pauses, and DONE
 takes you back after a 3-2-1.
 
 **Pads** (B3 in the song list): hit a pad, then turn the encoder to choose its
@@ -89,7 +94,10 @@ Each song is a folder in `BeatTrain/Songs/` with:
 - `song.ini`: title, artist and so on,
 - `notes.mid` or `notes.chart`: the charts, with a drum part,
 - the audio: `song`, and optionally `drums`, `bass`, `guitar`, `rhythm`,
-  `vocals`, `keys` and `crowd`, as `.mp3`, `.ogg` or `.wav`.
+  `vocals`, `keys` and `crowd`, as `.mp3`, `.ogg` or `.wav`,
+- optionally a `sounds` folder with one drum hit per pad colour for the pad
+  sounds: `kick`, `red` (snare), `yellow` (hi-hat), `blue` (tom), `orange`
+  (cymbal) and `green` (floor tom), as `.wav`, `.ogg` or `.mp3`.
 
 Song folders made for Clone Hero work as they are, and many are shared online.
 Rock Band packages (`_rb3con`, `.mogg`) and Opus audio don't work. Convert those to

@@ -66,7 +66,7 @@ One play-through of a **DrumChart**: the note states and the **ScoreState**, adv
 Finds the songs below a folder (every folder with a `song.ini` and a chart) and reads them into `SongMetadata`.
 
 **PlayerSettings**:
-The player's settings that outlive a session (timing offset, hit window, metronome / miss sound / stem volumes, Pad→**DrumVoice** assignment, **Highway layout**, **Strike line** position), as JSON in `BeatTrain/settings.json` on the card.
+The player's settings that outlive a session (timing offset, hit window, metronome / miss sound / stem volumes, **Pad sounds** volume, Pad→**DrumVoice** assignment, **Highway layout**, **Strike line** position), as JSON in `BeatTrain/settings.json` on the card.
 
 **DrumKit**:
 The single value type that owns kit geometry — the **Pad**↔**DrumTarget** layout and the **DrumVoice**↔**DrumTarget** canonical bijection — plus the player's two configuration maps: Pad→**DrumVoice** (which voice each pad plays) and Note→**Pad** (which pad a MIDI note triggers). Answers every "where does this land / what colour is it" question. Pure (Foundation only); colour lives in a separate extension (`Theme.swift`).
@@ -142,6 +142,9 @@ The line on the **Highway** where a note is to be struck: chart time 0, notes to
 
 **Song speed**:
 How fast the song plays, 50–100 %, for practising (SHIFT+FADER). Slower at the same pitch; chart time is song time, so the notes and the hit window slow down with it. Not saved; distinct from a song's tempo (**TempoMap**).
+
+**Pad sounds**:
+A song's own drum hits, one per **DrumVoice**, in its `sounds/` folder (picked in Trackyard). With their volume up in **PlayerSettings**, a strike plays its pad's voice; the `drums` **Stem** keeps its own volume, so it can be turned down to hear only the pads. Distinct from the miss cue and the metronome click, the other one-shot sounds.
 
 **Stem group**:
 The **Stems** SHIFT+K1–K3 turn together: the `song` stem, the `drums`, and all the others. Changes the per-stem volumes in **PlayerSettings**, each stem keeping its distance to the rest of its group.

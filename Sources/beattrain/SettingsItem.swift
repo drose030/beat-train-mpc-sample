@@ -8,11 +8,12 @@ enum SettingsItem: Equatable {
     case earlyWindow
     case metronome
     case missSound
+    case padSounds
     case highway
     case strikeLine
     case stem(Stem)
 
-    static let all: [SettingsItem] = [.timingOffset, .hitWindow, .earlyWindow, .metronome, .missSound, .highway, .strikeLine]
+    static let all: [SettingsItem] = [.timingOffset, .hitWindow, .earlyWindow, .metronome, .missSound, .padSounds, .highway, .strikeLine]
         + Stem.allCases.map { .stem($0) }
 
     var title: String {
@@ -22,6 +23,7 @@ enum SettingsItem: Equatable {
         case .earlyWindow: "  EARLY PART"
         case .metronome: "METRONOME"
         case .missSound: "MISS SOUND"
+        case .padSounds: "PAD SOUNDS"
         case .highway: "HIGHWAY"
         case .strikeLine: "  STRIKE LINE"
         case let .stem(stem): "STEM \(stem.rawValue.uppercased())"
@@ -34,6 +36,7 @@ enum SettingsItem: Equatable {
         case .timingOffset, .hitWindow, .earlyWindow: 5
         case .metronome, .missSound, .stem: 0.05
         case .highway, .strikeLine: 1
+        case .padSounds: 0.05
         }
     }
 
@@ -42,7 +45,7 @@ enum SettingsItem: Equatable {
         switch self {
         case .timingOffset: 2 * TimingConfiguration.offsetRangeMs
         case .hitWindow, .earlyWindow: 200
-        case .metronome, .missSound, .stem: 1
+        case .metronome, .missSound, .stem, .padSounds: 1
         case .highway: Double(HighwayLayout.allCases.count - 1)
         case .strikeLine: Double(StrikeLinePosition.allCases.count - 1)
         }
@@ -56,7 +59,7 @@ enum SettingsItem: Equatable {
             TimingConfiguration.minTotalSec * 1000...TimingConfiguration.maxTotalSec * 1000
         case .earlyWindow:
             0...TimingConfiguration.maxFront(forTotal: settings.hitWindowMs / 1000) * 1000
-        case .metronome, .missSound, .stem:
+        case .metronome, .missSound, .stem, .padSounds:
             0...1
         case .highway:
             0...Double(HighwayLayout.allCases.count - 1)
@@ -72,6 +75,7 @@ enum SettingsItem: Equatable {
         case .earlyWindow: settings.earlyWindowMs
         case .metronome: settings.metronomeVolume
         case .missSound: settings.missSoundVolume
+        case .padSounds: settings.padSoundsVolume
         case .highway: Double(HighwayLayout.allCases.firstIndex(of: settings.highwayLayout) ?? 0)
         case .strikeLine: Double(StrikeLinePosition.allCases.firstIndex(of: settings.strikeLine) ?? 0)
         case let .stem(stem): settings.stemVolume(stem)
@@ -87,6 +91,7 @@ enum SettingsItem: Equatable {
         case .earlyWindow: settings.earlyWindowMs = rounded
         case .metronome: settings.metronomeVolume = rounded
         case .missSound: settings.missSoundVolume = rounded
+        case .padSounds: settings.padSoundsVolume = rounded
         case .highway:
             let layouts = HighwayLayout.allCases
             settings.highwayLayout = layouts[min(max(Int(rounded), 0), layouts.count - 1)]
@@ -119,7 +124,7 @@ enum SettingsItem: Equatable {
             case .third: return "1/3"
             case .middle: return "MIDDLE"
             }
-        case .metronome, .missSound, .stem:
+        case .metronome, .missSound, .stem, .padSounds:
             return value == 0 ? "OFF" : "\(Int((value * 100).rounded()))%"
         }
     }

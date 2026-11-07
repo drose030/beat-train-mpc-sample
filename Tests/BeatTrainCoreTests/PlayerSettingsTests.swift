@@ -65,6 +65,7 @@ struct PlayerSettingsTests {
         settings.metronomeVolume = 0.6
         settings.missSoundVolume = 0
         settings.stemVolumes[.vocals] = 0.3
+        settings.padSoundsVolume = 0.7
         try settings.save(to: url)
         let loaded = PlayerSettings.load(from: url)
         #expect(loaded == settings)

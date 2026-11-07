@@ -45,12 +45,13 @@ int cmpc_audio_finished(cmpc_audio *audio);
 /// milliseconds. The position counts song seconds, so it runs slower too.
 void cmpc_audio_set_speed(cmpc_audio *audio, double speed);
 double cmpc_audio_speed(cmpc_audio *audio);
-/// Since the last call: device underruns (heard as clicks), and the average and
-/// longest time mixing one period took, in seconds. Resets them.
-void cmpc_audio_take_stats(cmpc_audio *audio, unsigned *underruns, double *mix_average, double *mix_longest);
+/// Since the last call: device underruns (heard as clicks), the average and
+/// longest time mixing one period took, and how long what was mixed waited in the
+/// device on average (what a new sound waits too), in seconds. Resets them.
+void cmpc_audio_take_stats(cmpc_audio *audio, unsigned *underruns, double *mix_average, double *mix_longest, double *delay_average);
 
-/// One-shot effects (miss sound, metronome click) live in a few slots.
-#define CMPC_AUDIO_EFFECT_SLOTS 4
+/// One-shot effects (miss sound, metronome click, pad sounds) live in a few slots.
+#define CMPC_AUDIO_EFFECT_SLOTS 8
 
 /// Decodes an MP3, Ogg Vorbis or WAV file into an effect slot (replacing what
 /// was there). 0 or -1.

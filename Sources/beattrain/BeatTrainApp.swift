@@ -395,6 +395,7 @@ final class BeatTrainApp {
         case var .playing(play):
             guard kit.voice(forPad: pad) != .off else { return }
             play.padFeedback.strike(pad: pad, at: now)
+            playback.strike(kit.voice(forPad: pad))
             defer { screen = .playing(play) }
             let time = playback.chartTime(now: now)
             // Warm-up strikes during the count-in and while paused are not judged.

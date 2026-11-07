@@ -226,11 +226,12 @@ struct cmpc_audio {
     uint64_t written;
     cmpc_heard_clock *clock;
 
-    // Since the last `cmpc_audio_take_stats`: device underruns, and how long
-    // mixing a period took.
+    // Since the last `cmpc_audio_take_stats`: device underruns, how long mixing a
+    // period took, and the frames queued in the device after each.
     unsigned underruns;
     unsigned mixes;
     double mix_total, mix_longest;
+    double delay_total;
 };
 
 static double now_sec(void) {
@@ -454,6 +455,7 @@ static void *mixer_thread(void *arg) {
         snd_pcm_sframes_t delay = 0;
         if (ioctl(a->fd, SNDRV_PCM_IOCTL_DELAY, &delay) || delay < 0) delay = 0;
         pthread_mutex_lock(&a->lock);
+        a->delay_total += (double)delay;
         advance_clock_locked(a, a->period, (uint64_t)delay);
         pthread_mutex_unlock(&a->lock);
     }
@@ -474,8 +476,11 @@ cmpc_audio *cmpc_audio_open(char *err, size_t err_len) {
     }
     cmpc_audio *a = calloc(1, sizeof(*a));
     a->fd = fd;
-    // The stock app's setup first, then simpler ones.
+    // Short periods first, so that a pad sound follows its strike quickly (four
+    // periods queued: 11.6 ms at 128 frames), each with 4 channels (the lab) and 2
+    // (the MPC Sample); then the stock app's setup and simpler ones.
     static const unsigned tries[][3] = {
+        { FORMAT_S32_LE, 4, 128 }, { FORMAT_S32_LE, 2, 128 }, { FORMAT_S32_LE, 4, 256 }, { FORMAT_S32_LE, 2, 256 },
         { FORMAT_S32_LE, 4, 512 }, { FORMAT_S32_LE, 4, 1024 }, { FORMAT_S32_LE, 2, 512 },
         { FORMAT_S16_LE, 2, 512 }, { FORMAT_S16_LE, 2, 1024 },
     };
@@ -753,13 +758,14 @@ double cmpc_audio_speed(cmpc_audio *a) {
     return speed;
 }
 
-void cmpc_audio_take_stats(cmpc_audio *a, unsigned *underruns, double *mix_average, double *mix_longest) {
+void cmpc_audio_take_stats(cmpc_audio *a, unsigned *underruns, double *mix_average, double *mix_longest, double *delay_average) {
     pthread_mutex_lock(&a->lock);
     *underruns = a->underruns;
     *mix_average = a->mixes ? a->mix_total / a->mixes : 0;
     *mix_longest = a->mix_longest;
+    *delay_average = a->mixes ? a->delay_total / a->mixes / a->rate : 0;
     a->underruns = a->mixes = 0;
-    a->mix_total = a->mix_longest = 0;
+    a->mix_total = a->mix_longest = a->delay_total = 0;
     pthread_mutex_unlock(&a->lock);
 }
 

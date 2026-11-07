@@ -95,4 +95,38 @@ struct SongPlaybackTests {
         playback.preview(.miss)
         #expect(audio.render(frames: 512).contains { $0 != 0 })
     }
+
+    @Test func padSoundsPlayAtTheirOwnLevelNextToTheDrumStem() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("beattrain-pad-sounds-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try FileManager.default.createDirectory(at: folder.appendingPathComponent("sounds"), withIntermediateDirectories: true)
+        try Data(SongEndTests.wav([Int16](repeating: 8000, count: 44100))).write(to: folder.appendingPathComponent("drums.wav"))
+        try Data(SongEndTests.wav([Int16](repeating: 16000, count: 441))).write(to: folder.appendingPathComponent("sounds/kick.wav"))
+        let song = SongMetadata(id: folder.path, title: "T", artist: "A", album: nil, hasDrumTrack: true, drumDifficulty: nil, hasProDrums: false,
+                                chartDelayMilliseconds: 0, songFolderURL: folder, notesURL: nil, audioURL: nil)
+        let audio = AudioEngine(offlineRate: 44100)
+        let playback = SongPlayback(audio: audio)
+        playback.load(song, beatTimes: [])
+        playback.begin(now: 0)
+        playback.tick(now: 3)
+        #expect(!playback.playsPadSounds, "off by default")
+        playback.strike(.kick)
+        #expect(audio.render(frames: 512).allSatisfy { abs($0 - 8000.0 / 32768) < 0.01 }, "the drum stem alone")
+
+        // Pads only: the drum stem turned down, the pad sounds up.
+        playback.apply(PlayerSettings(stemVolumes: [.drums: 0], padSoundsVolume: 1))
+        #expect(playback.playsPadSounds)
+        _ = audio.render(frames: 2048)  // mixed ahead at the old level for the time stretch
+        #expect(audio.render(frames: 512).allSatisfy { $0 == 0 }, "the drum stem is silent")
+        playback.strike(.red)
+        #expect(audio.render(frames: 512).allSatisfy { $0 == 0 }, "no sound for the snare in this song")
+        playback.strike(.kick)
+        #expect(audio.render(frames: 256).contains { abs($0 - 16000.0 / 32768) < 0.01 }, "the kick's sound")
+
+        // Both, the pad sounds at half their level.
+        playback.apply(PlayerSettings(padSoundsVolume: 0.5))
+        _ = audio.render(frames: 2048)
+        playback.strike(.kick)
+        #expect(audio.render(frames: 256).contains { abs($0 - (8000.0 + 8000.0) / 32768) < 0.01 }, "the stem and half the kick")
+    }
 }

@@ -65,13 +65,14 @@ public final class AudioEngine {
         cmpc_audio_position(handle)
     }
 
-    /// Since the last call: device underruns (heard as clicks), and the average and
-    /// longest time mixing one device period took, in seconds.
-    public func takeStats() -> (underruns: Int, mixAverage: Double, mixLongest: Double) {
+    /// Since the last call: device underruns (heard as clicks), the average and
+    /// longest time mixing one device period took, and how long what was mixed
+    /// waited in the device on average (as a new sound does), in seconds.
+    public func takeStats() -> (underruns: Int, mixAverage: Double, mixLongest: Double, delay: Double) {
         var underruns: UInt32 = 0
-        var average = 0.0, longest = 0.0
-        cmpc_audio_take_stats(handle, &underruns, &average, &longest)
-        return (Int(underruns), average, longest)
+        var average = 0.0, longest = 0.0, delay = 0.0
+        cmpc_audio_take_stats(handle, &underruns, &average, &longest, &delay)
+        return (Int(underruns), average, longest, delay)
     }
 
     /// Song speed, 0.5–1, at the same pitch. `position` counts song seconds, so
